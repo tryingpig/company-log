@@ -1,0 +1,129 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f7f5;
+  --surface: #fcfcfb;
+  --line: #e4e3df;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #8a8984;
+  --up: #e34948;          /* 상향·상승 (국내 관례: 빨강) */
+  --down: #2a78d6;        /* 하향·하락 (파랑) */
+  --up-bg: #fdecec;
+  --down-bg: #e8f1fc;
+  --ma5: #eb6834;
+  --ma10: #1baf7a;
+  --ma20: #6250d6;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --line: #2e2e2c;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --muted: #8d8c85;
+    --up: #e66767;
+    --down: #3987e5;
+    --up-bg: #3a1f1f;
+    --down-bg: #1a2b40;
+    --ma5: #d95926;
+    --ma10: #199e70;
+    --ma20: #9085e9;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211;
+  --surface: #1a1a19;
+  --line: #2e2e2c;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --muted: #8d8c85;
+  --up: #e66767;
+  --down: #3987e5;
+  --up-bg: #3a1f1f;
+  --down-bg: #1a2b40;
+  --ma5: #d95926;
+  --ma10: #199e70;
+  --ma20: #9085e9;
+  --accent: #3987e5;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+
+header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+header.top h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
+header.top .meta { color: var(--muted); font-size: 13px; }
+.back { color: var(--text-2); font-size: 14px; }
+.back:hover { color: var(--text); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+
+/* ── 목록 ── */
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.toolbar input {
+  flex: 1 1 220px; min-width: 0; padding: 10px 12px; font: inherit;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text);
+}
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.seg button { font: inherit; font-size: 14px; border: 0; background: none; color: var(--text-2); padding: 8px 12px; cursor: pointer; }
+.seg button.on { background: var(--text); color: var(--surface); }
+
+.list { list-style: none; margin: 0; padding: 0; }
+.list li + li { border-top: 1px solid var(--line); }
+.list a { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 16px; }
+.list a:hover { background: var(--bg); }
+.list .nm { font-weight: 600; }
+.list .nm small { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 12px; }
+.list .cnt { color: var(--text-2); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.list .last { color: var(--text-2); font-size: 13px; grid-column: 1 / -1; }
+.empty { padding: 24px 16px; color: var(--muted); text-align: center; }
+
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 6px; }
+.tag.up { color: var(--up); background: var(--up-bg); }
+.tag.down { color: var(--down); background: var(--down-bg); }
+
+/* ── 종목 ── */
+.head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 6px 0 14px; }
+.head h1 { font-size: 24px; margin: 0; letter-spacing: -0.02em; }
+.head .code { color: var(--muted); font-size: 14px; }
+.head .px { margin-left: auto; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.head .chg { font-size: 14px; font-variant-numeric: tabular-nums; }
+.pos { color: var(--up); } .neg { color: var(--down); }
+
+.chart-box { padding: 12px 12px 6px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); padding: 0 4px 8px; font-variant-numeric: tabular-nums; }
+.legend .sw { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; border-radius: 1px; }
+.legend .date { color: var(--text); font-weight: 600; }
+#chart { height: 360px; }
+.chart-note { color: var(--muted); font-size: 12px; padding: 4px 4px 0; }
+
+h2.sec { font-size: 16px; margin: 28px 0 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+h2.sec .seg { margin-left: auto; }
+
+.log { display: flex; flex-direction: column; gap: 10px; }
+.card { padding: 14px 16px; scroll-margin-top: 16px; transition: box-shadow .3s; }
+.card.flash { box-shadow: 0 0 0 2px var(--accent); }
+.card .row1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.card .row1 .broker { color: var(--text); font-weight: 600; }
+.card .title { font-weight: 700; margin: 6px 0 8px; font-size: 16px; letter-spacing: -0.01em; }
+.card .nums { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; font-variant-numeric: tabular-nums; }
+.card .nums b { font-weight: 700; }
+.card .nums .lbl { color: var(--muted); margin-right: 4px; }
+.card .sum { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--text-2); font-size: 14px; white-space: pre-line; }
+
+@media (max-width: 520px) {
+  #chart { height: 280px; }
+  .head .px { margin-left: 0; width: 100%; }
+}

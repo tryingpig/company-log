@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Log</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="./">← 종목 목록</a>
+
+  <div class="head">
+    <h1 id="name">…</h1><span class="code" id="code"></span>
+    <span class="px" id="px"></span><span class="chg" id="chg"></span>
+  </div>
+
+  <div class="panel chart-box">
+    <div class="legend" id="legend"></div>
+    <div id="chart"></div>
+    <div class="chart-note">최근 3개월 일봉 · ▲ 목표가 상향 / ▼ 하향 리포트 (마커를 누르면 해당 리포트로 이동)</div>
+  </div>
+
+  <h2 class="sec">증권사 리포트 로그 <span class="meta" id="repCount" style="color:var(--muted);font-weight:400;font-size:13px"></span>
+    <div class="seg" id="dirSeg">
+      <button data-v="all" class="on">전체</button>
+      <button data-v="up">상향</button>
+      <button data-v="down">하향</button>
+    </div>
+  </h2>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const fmt = n => n == null ? '-' : n.toLocaleString('ko-KR');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const code = new URLSearchParams(location.search).get('code');
+const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20']];
+let data, chart, candle, maSeries = [], dir = 'all';
+
+function sma(bars, n) {
+  const out = [];
+  let sum = 0;
+  bars.forEach((b, i) => {
+    sum += b.c;
+    if (i >= n) sum -= bars[i - n].c;
+    if (i >= n - 1) out.push({time: b.d, value: Math.round(sum / n)});
+  });
+  return out;
+}
+
+function threeMonthsBefore(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setMonth(d.getMonth() - 3);
+  return d.toISOString().slice(0, 10);
+}
+
+/* ── 차트 ── */
+function drawChart() {
+  const el = document.getElementById('chart');
+  const bars = data.prices;
+  if (!bars.length) { el.innerHTML = '<div class="empty">주가 데이터가 없어요</div>'; return; }
+  const from = threeMonthsBefore(bars[bars.length - 1].d);
+  const vis = bars.filter(b => b.d >= from);
+
+  chart = LightweightCharts.createChart(el, {
+    autoSize: true,
+    layout: {background: {color: 'transparent'}, textColor: css('--text-2'), fontSize: 12},
+    grid: {vertLines: {visible: false}, horzLines: {color: css('--line')}},
+    rightPriceScale: {borderVisible: false},
+    timeScale: {borderVisible: false, fixLeftEdge: true, fixRightEdge: true},
+    crosshair: {mode: LightweightCharts.CrosshairMode.Normal},
+    localization: {priceFormatter: p => Math.round(p).toLocaleString('ko-KR')},
+  });
+  candle = chart.addCandlestickSeries({
+    upColor: css('--up'), downColor: css('--down'), borderVisible: false,
+    wickUpColor: css('--up'), wickDownColor: css('--down'), priceLineVisible: false,
+  });
+  candle.setData(vis.map(b => ({time: b.d, open: b.o, high: b.h, low: b.l, close: b.c})));
+
+  // 이동평균은 전체 일봉으로 계산하고 3개월 구간만 표시
+  maSeries = MAS.map(([n, v]) => {
+    const s = chart.addLineSeries({color: css(v), lineWidth: 2, priceLineVisible: false,
+                                   lastValueVisible: false, crosshairMarkerVisible: false});
+    s.setData(sma(bars, n).filter(p => p.time >= from));
+    return s;
+  });
+
+  // 리포트 마커: 장 없는 날(주말·휴일)에 나온 리포트는 다음 거래일에 표시
+  const days = vis.map(b => b.d);
+  const byDay = {};
+  data.reports.forEach(r => {
+    const d = r.date.slice(0, 10);
+    const t = days.find(x => x >= d);
+    if (!t || d < from) return;
+    (byDay[t] ||= []).push(r);
+  });
+  const markers = [];
+  Object.entries(byDay).forEach(([t, rs]) => {
+    ['up', 'down'].forEach(k => {
+      const g = rs.filter(r => r.dir === k);
+      if (!g.length) return;
+      markers.push({
+        time: t, id: String(g[0].id),
+        position: k === 'up' ? 'belowBar' : 'aboveBar',
+        shape: k === 'up' ? 'arrowUp' : 'arrowDown',
+        color: css(k === 'up' ? '--up' : '--down'),
+        text: g.length > 1 ? String(g.length) : '',
+      });
+    });
+  });
+  markers.sort((a, b) => a.time < b.time ? -1 : 1);
+  candle.setMarkers(markers);
+  chart.timeScale().fitContent();
+
+  chart.subscribeCrosshairMove(p => updateLegend(p.time ? p : null));
+  chart.subscribeClick(p => {
+    if (p.hoveredObjectId) focusCard(p.hoveredObjectId);
+  });
+  updateLegend(null);
+}
+
+function updateLegend(p) {
+  const bars = data.prices;
+  let bar, mas;
+  if (p) {
+    const c = p.seriesData.get(candle);
+    bar = c && {d: p.time, o: c.open, h: c.high, l: c.low, c: c.close};
+    mas = maSeries.map(s => p.seriesData.get(s)?.value);
+  } else {
+    bar = bars[bars.length - 1];
+    mas = MAS.map(([n]) => { const a = sma(bars, n); return a[a.length - 1]?.value; });
+  }
+  if (!bar) return;
+  document.getElementById('legend').innerHTML =
+    `<span class="date">${bar.d}</span><span>종가 ${fmt(bar.c)}</span>` +
+    MAS.map(([n, v], i) => `<span><span class="sw" style="background:var(${v})"></span>${n}일 ${fmt(mas[i])}</span>`).join('');
+}
+
+/* ── 로그 ── */
+function card(r) {
+  const up = r.dir === 'up';
+  const pct = r.diff != null && r.from ? ` (${r.diff > 0 ? '+' : ''}${(r.diff / r.from * 100).toFixed(1)}%)` : '';
+  const target = r.from != null
+    ? `${fmt(r.from)} → <b>${fmt(r.to)}</b>원 <span class="${up ? 'pos' : 'neg'}">${r.diff > 0 ? '▲' : r.diff < 0 ? '▼' : ''}${fmt(Math.abs(r.diff))}${pct}</span>`
+    : `<b>${fmt(r.to)}</b>원 <span style="color:var(--muted)">(이전값 없음)</span>`;
+  return `<article class="panel card" id="r${r.id}">
+    <div class="row1"><span class="tag ${r.dir}">${up ? '▲ 상향' : '▼ 하향'}</span>
+      <span>${esc(r.date)}</span><span>·</span><span class="broker">${esc(r.broker)}</span></div>
+    <div class="title">${esc(r.title)}</div>
+    <div class="nums">
+      <span><span class="lbl">목표주가</span>${target}</span>
+      <span><span class="lbl">투자의견</span>${esc(r.opinion)}</span>
+    </div>
+    ${r.summary ? `<div class="sum">${esc(r.summary)}</div>` : ''}
+  </article>`;
+}
+
+function renderLog() {
+  const rs = data.reports.filter(r => dir === 'all' || r.dir === dir);
+  document.getElementById('log').innerHTML = rs.length ? rs.map(card).join('') : '<div class="panel empty">해당 리포트가 없어요</div>';
+}
+
+function focusCard(id) {
+  if (dir !== 'all') document.querySelector('#dirSeg button[data-v="all"]').click();
+  const el = document.getElementById('r' + id);
+  if (!el) return;
+  el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1600);
+}
+
+document.getElementById('dirSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  dir = b.dataset.v;
+  document.querySelectorAll('#dirSeg button').forEach(x => x.classList.toggle('on', x === b));
+  renderLog();
+});
+
+function renderHead() {
+  document.title = `${data.name} · Company Log`;
+  document.getElementById('name').textContent = data.name;
+  document.getElementById('code').textContent = data.code;
+  const b = data.prices, n = b.length;
+  if (n) {
+    document.getElementById('px').textContent = fmt(b[n - 1].c) + '원';
+    if (n > 1) {
+      const d = b[n - 1].c - b[n - 2].c, p = d / b[n - 2].c * 100;
+      const el = document.getElementById('chg');
+      el.textContent = `${d > 0 ? '▲' : d < 0 ? '▼' : ''}${fmt(Math.abs(d))} (${p > 0 ? '+' : ''}${p.toFixed(2)}%)`;
+      el.className = 'chg ' + (d > 0 ? 'pos' : d < 0 ? 'neg' : '');
+    }
+  }
+  const up = data.reports.filter(r => r.dir === 'up').length;
+  document.getElementById('repCount').textContent = `${data.reports.length}건 · 상향 ${up} · 하향 ${data.reports.length - up}`;
+}
+
+// 테마가 바뀌면 차트 색을 다시 칠한다
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (!chart) return;
+  chart.remove(); drawChart();
+});
+
+if (!code) location.replace('./');
+fetch(`data/stocks/${code}.json`, {cache: 'no-cache'})
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { data = d; renderHead(); drawChart(); renderLog(); })
+  .catch(() => { document.getElementById('name').textContent = '종목을 찾을 수 없어요'; });
+</script>
+</body>
+</html>
