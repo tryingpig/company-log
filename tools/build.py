@@ -142,6 +142,52 @@ def fetch_bars(code):
     return None
 
 
+# ── 증권사별 집계 (코드 계산 — 로그에 적힌 목표가만 쓴다) ──────────────────────
+
+CONSENSUS_DAYS = 183     # 통합 목표가에는 최근 6개월 안에 낸 증권사 최신 목표가만 넣는다
+
+
+def _gap(target, close):
+    return round((target / close - 1) * 100, 1) if (target and close) else None
+
+
+def summarize_brokers(reps, close):
+    """reps: 최신순. 증권사별 최신 목표가·괴리율, 같은 증권사 안의 상향↔하향 전환 표시, 통합 목표가."""
+    by_broker = {}
+    for r in sorted(reps, key=lambda r: r["id"]):           # 오래된 것부터 훑어 전환을 찾는다
+        prev = by_broker.get(r["broker"])
+        r["flip"] = bool(prev and prev["dir"] != r["dir"])
+        if r["flip"]:
+            r["prev_dir"] = prev["dir"]
+        by_broker[r["broker"]] = r
+
+    brokers = []
+    for name, last in by_broker.items():
+        mine = [r for r in reps if r["broker"] == name]       # 최신순
+        brokers.append({
+            "broker": name, "count": len(mine),
+            "up": sum(r["dir"] == "up" for r in mine), "down": sum(r["dir"] == "down" for r in mine),
+            "last_id": last["id"], "last_date": last["date"], "last_dir": last["dir"],
+            "target": last["to"], "prev_target": last["from"], "opinion": last["opinion"],
+            "gap": _gap(last["to"], close),
+            "flips": [r["id"] for r in mine if r.get("flip")],
+        })
+    brokers.sort(key=lambda b: b["last_id"], reverse=True)
+
+    cutoff = (datetime.now(KST) - timedelta(days=CONSENSUS_DAYS)).strftime("%Y-%m-%d")
+    tgts = sorted(b["target"] for b in brokers if b["target"] and b["last_date"][:10] >= cutoff)
+    consensus = None
+    if tgts:
+        n = len(tgts)
+        med = tgts[n // 2] if n % 2 else (tgts[n // 2 - 1] + tgts[n // 2]) / 2
+        mean = sum(tgts) / n
+        consensus = {"n": n, "mean": round(mean), "median": round(med), "max": tgts[-1], "min": tgts[0],
+                     "gap_mean": _gap(mean, close), "gap_median": _gap(med, close),
+                     "up": sum(1 for b in brokers if b["last_date"][:10] >= cutoff and b["last_dir"] == "up"),
+                     "days": CONSENSUS_DAYS}
+    return brokers, consensus
+
+
 def main():
     no_price = "--no-price" in sys.argv
     msgs = load_messages()
@@ -178,7 +224,11 @@ def main():
         reps = sorted(v["reports"], key=lambda r: r["id"], reverse=True)
         for r in reps:
             r.pop("name", None)
+        close = bars[-1]["c"] if bars else None
+        brokers, consensus = summarize_brokers(reps, close)
         path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now,
+                                    "close": close, "close_date": bars[-1]["d"] if bars else None,
+                                    "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
                                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         last = reps[0]
