@@ -86,7 +86,7 @@ async def main_async():
     t0 = time.time()
     log("build 시작")
     r = subprocess.run([PY39, str(ROOT / "tools" / "build.py")], cwd=ROOT, capture_output=True)
-    out = r.stdout.decode("cp949", errors="replace") + r.stderr.decode("cp949", errors="replace")
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace")     # PYTHONUTF8=1 로 실행되므로 utf-8
     for ln in out.strip().splitlines()[-6:]:
         log(f"  build | {ln}")
     if r.returncode:
