@@ -123,6 +123,21 @@ def resolve_codes(names):
     return cache
 
 
+ALIAS_NAMES = set(json.loads(ALIASES.read_text(encoding="utf-8"))) if ALIASES.exists() else set()
+
+
+def current_name(code):
+    """종목코드로 지금 상장 이름 조회(사명 변경 종목만, 몇 건 안 됨)."""
+    try:
+        r = requests.get("https://ac.stock.naver.com/ac", params={"q": code, "target": "stock"}, headers=UA, timeout=10)
+        for i in r.json().get("items", []):
+            if i.get("code") == code:
+                return i["name"]
+    except Exception as e:
+        print(f"  현재 이름 조회 실패 {code}: {e}")
+    return None
+
+
 # ── 일봉 ────────────────────────────────────────────────────────────────────
 
 def fetch_bars(code):
@@ -151,6 +166,15 @@ def fetch_bars(code):
 # ── 증권사별 집계 (코드 계산 — 로그에 적힌 목표가만 쓴다) ──────────────────────
 
 WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·전환·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
+
+
+HALF_LIFE = 30       # 최근 가중: 30일 지날 때마다 무게 절반 (오늘 1 → 30일 전 0.5 → 60일 전 0.25)
+
+
+def recency_weight(date_str, today=None):
+    today = today or datetime.now(KST).date()
+    age = (today - datetime.strptime(date_str[:10], "%Y-%m-%d").date()).days
+    return round(0.5 ** (max(age, 0) / HALF_LIFE), 3)
 
 
 def _gap(target, close):
@@ -182,18 +206,22 @@ def summarize_brokers(reps, close):
             "last_id": last["id"], "last_date": last["date"], "last_dir": last["dir"],
             "target": last["to"], "prev_target": last["from"], "opinion": last["opinion"],
             "gap": _gap(last["to"], close),
+            "weight": recency_weight(last["date"]),
             "flips": [r["id"] for r in mine if r.get("flip")],
             "single": len(mine) == 1,                         # 3개월 안 1건 → 전환 판단 불가
         })
     brokers.sort(key=lambda b: b["last_id"], reverse=True)
 
     tgts = sorted(b["target"] for b in brokers if b["target"])
+    wts = [(b["target"], b["weight"]) for b in brokers if b["target"]]
     consensus = None
     if tgts:
         n = len(tgts)
         med = tgts[n // 2] if n % 2 else (tgts[n // 2 - 1] + tgts[n // 2]) / 2
         mean = sum(tgts) / n
-        consensus = {"n": n, "mean": round(mean), "median": round(med), "max": tgts[-1], "min": tgts[0],
+        wmean = sum(t * w for t, w in wts) / sum(w for _, w in wts)
+        consensus = {"n": n, "wmean": round(wmean), "gap_wmean": _gap(wmean, close), "half_life": HALF_LIFE,
+                     "mean": round(mean), "median": round(med), "max": tgts[-1], "min": tgts[0],
                      "gap_mean": _gap(mean, close), "gap_median": _gap(med, close),
                      "up": sum(1 for b in brokers if b["last_dir"] == "up"),
                      "days": WINDOW_DAYS}
@@ -239,6 +267,8 @@ def main():
         bars = prices.get(code) or old.get("prices", [])   # 수집 실패 시 기존 값 유지
         reps = sorted(v["reports"], key=lambda r: r["id"], reverse=True)
         v["name"] = reps[0]["name"]                          # 사명이 바뀌었으면 최근 이름으로
+        if v["name"] in ALIAS_NAMES:                         # 옛 이름 리포트뿐이면 지금 상장 이름으로
+            v["name"] = current_name(code) or v["name"]
         for r in reps:
             r.pop("name", None)
         close = bars[-1]["c"] if bars else None

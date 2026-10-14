@@ -258,3 +258,6 @@ details.more summary { cursor: pointer; color: var(--text-2); font-size: 13px; m
 .bb-tog { font: inherit; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; cursor: pointer; }
 .bb-tog.on { color: var(--text-2); border-color: var(--bb); }
 .legend .sw.dash { background: repeating-linear-gradient(90deg, var(--bb) 0 3px, transparent 3px 5px); }
+.rv-row.old { opacity: .5; }
+.pending { margin: 0 0 14px; padding: 8px 12px; border-radius: 8px; border: 1px dashed var(--line); color: var(--text-2); font-size: 13px; }
+.ai-st { font-size: 11px; color: var(--muted); margin-left: 6px; }

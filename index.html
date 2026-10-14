@@ -33,6 +33,15 @@ const fmt = n => n == null ? '-' : n.toLocaleString('ko-KR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let stocks = [], dir = 'all';
 
+// AI 정리 상태: 날짜 / 대기
+function aiTxt(s) {
+  const a = s.ai;
+  if (!a) return '';
+  if (a.queued) return '<span class="ai-st">AI 정리 대기</span>';
+  const p = a.pending ? ` · ${a.pending}건 대기` : (a.summary_pending ? ' · 의견 갱신 대기' : '');
+  return `<span class="ai-st">AI 정리 ${esc((a.date || '').slice(5, 10))}${p}</span>`;
+}
+
 function render() {
   const q = document.getElementById('q').value.trim().toLowerCase();
   const rows = stocks.filter(s =>
@@ -41,7 +50,7 @@ function render() {
   document.getElementById('list').innerHTML = rows.length ? rows.map(s => `
     <li><a href="stock.html?code=${s.code}">
       <span class="nm">${esc(s.name)}<small>${s.code}</small></span>
-      <span class="cnt">리포트 ${s.count} · <span class="pos">▲${s.up}</span> <span class="neg">▼${s.down}</span></span>
+      <span class="cnt">리포트 ${s.count} · <span class="pos">▲${s.up}</span> <span class="neg">▼${s.down}</span>${aiTxt(s)}</span>
       <span class="last"><span class="tag ${s.last_dir}">${s.last_dir === 'up' ? '상향' : '하향'}</span>
         ${esc(s.last_date)} · ${esc(s.last_broker)} · 목표가 ${fmt(s.last_to)}원</span>
     </a></li>`).join('') : '<li class="empty">검색 결과가 없어요</li>';

@@ -183,6 +183,16 @@ function updateLegend(p) {
 }
 
 /* ── 통합 정리 ── */
+function aiPendingNote() {
+  const a = analysis;
+  const win = data.reports.filter(r => r.win).length;
+  if (!a) return win >= 3 ? `<div class="pending">AI 정리 대기 중 — 아직 첫 정리 전이에요. 매일 20시에 순서대로 채워져요</div>` : '';
+  const parts = [];
+  if (a.pending) parts.push(`새 리포트 ${a.pending}건 미반영`);
+  if (a.needs_summary) parts.push('의견 정리 갱신 전');
+  return parts.length ? `<div class="pending">AI 정리 대기 중 · ${parts.join(' · ')} (매일 20시 처리)</div>` : '';
+}
+
 const pctTxt = g => g == null ? '-' : `${g > 0 ? '+' : ''}${g.toFixed(1)}%`;
 const pctCls = g => g == null ? '' : g >= 0 ? 'pos' : 'neg';
 const dirName = d => d === 'up' ? '상향' : '하향';
@@ -206,7 +216,7 @@ function rangeStrip(c) {
   return `<div class="strip" aria-label="증권사별 최신 목표가 분포">
       <div class="track"></div>${dots}
       ${close ? `<span class="now" style="left:${x(close)}"><em${edge(close)}>현재가 ${fmt(close)}</em></span>` : ''}
-      <span class="avg" style="left:${x(c.mean)}"><em${edge(c.mean)}>평균 ${fmt(c.mean)}</em></span>
+      <span class="avg" style="left:${x(c.wmean ?? c.mean)}"><em${edge(c.wmean ?? c.mean)}>가중 평균 ${fmt(c.wmean ?? c.mean)}</em></span>
     </div>
     <div class="strip-axis"><span>${fmt(lo)}</span><span>${fmt(hi)}</span></div>`;
 }
@@ -215,24 +225,26 @@ function renderConsensus() {
   const c = data.consensus, el = document.getElementById('consensus');
   if (!c) { el.innerHTML = '<div class="empty">최근 3개월 안의 목표가가 없어요</div>'; return; }
   document.getElementById('consSub').textContent =
-    `최근 3개월 · ${c.n}개 증권사 최신 목표가 기준 · 현재가 ${data.close_date || ''}`;
+    `최근 3개월 · ${c.n}개 증권사 최신 목표가 · 최근에 낸 목표가일수록 크게 반영(${c.half_life || 30}일마다 무게 절반) · 현재가 ${data.close_date || ''}`;
   let html = `<div class="stats">
       <div><span class="k">현재가</span><b>${fmt(data.close)}원</b></div>
-      <div><span class="k">목표가 평균</span><b>${fmt(c.mean)}원</b><span class="${pctCls(c.gap_mean)}">괴리 ${pctTxt(c.gap_mean)}</span></div>
+      <div><span class="k">목표가 (최근 가중)</span><b>${fmt(c.wmean ?? c.mean)}원</b><span class="${pctCls(c.gap_wmean ?? c.gap_mean)}">괴리 ${pctTxt(c.gap_wmean ?? c.gap_mean)}</span></div>
+      <div><span class="k">단순 평균</span><b>${fmt(c.mean)}원</b><span class="${pctCls(c.gap_mean)}">괴리 ${pctTxt(c.gap_mean)}</span></div>
       <div><span class="k">중앙값</span><b>${fmt(c.median)}원</b><span class="${pctCls(c.gap_median)}">괴리 ${pctTxt(c.gap_median)}</span></div>
       <div><span class="k">범위</span><b>${fmt(c.min)} ~ ${fmt(c.max)}</b></div>
       <div><span class="k">최근 방향</span><b><span class="pos">▲${c.up}</span> <span class="neg">▼${c.n - c.up}</span></b></div>
     </div>${rangeStrip(c)}`;
 
   const a = analysis;
+  html += aiPendingNote();
   if (a) {
     if (a.overall?.numbers?.length) html += `<h3 class="h3">핵심 숫자</h3>${bullets(a.overall.numbers, 'num')}`;
-    if (a.table?.length) html += `<h3 class="h3">증권사 추정치 비교 <span class="sub">증권사별 가장 최근 값 · 2개사 이상 언급 항목 · 금액은 억원 환산 · ⚠ 원문 단위 확인 필요(평균 제외)</span></h3>
+    if (a.table?.length) html += `<h3 class="h3">증권사 추정치 비교 <span class="sub">증권사별 가장 최근 값 · 평균은 최근에 낸 값일수록 크게 반영 · 2개사 이상 언급 항목 · 금액은 억원 환산 · ⚠ 원문 단위 확인 필요(평균 제외)</span></h3>
       <div class="tbl-wrap"><table class="tbl">
-        <thead><tr><th>항목</th><th>기간</th><th class="r">평균</th><th class="r">범위</th><th>증권사별</th></tr></thead>
+        <thead><tr><th>항목</th><th>기간</th><th class="r">평균 (최근 가중)</th><th class="r">범위</th><th>증권사별</th></tr></thead>
         <tbody>${a.table.map(t => `<tr>
           <td>${esc(t.item)}</td><td>${esc(t.period)}</td>
-          <td class="r">${t.mean == null ? '<span class="odd-txt">단위 불일치</span>' : `<b>${fmtVal(t.mean, t.unit)}</b>`}</td>
+          <td class="r">${t.mean == null ? '<span class="odd-txt">단위 불일치</span>' : `<b>${fmtVal(t.wmean ?? t.mean, t.unit)}</b>${t.wmean != null && t.n > 1 ? `<br><small class="muted">단순 ${fmtVal(t.mean, '')}</small>` : ''}`}</td>
           <td class="r">${t.mean == null ? '-' : t.min === t.max ? fmtVal(t.min, t.unit) : `${fmtVal(t.min, '')} ~ ${fmtVal(t.max, t.unit)}`}</td>
           <td class="chips">${t.brokers.map(b => `<a href="#r${b.id}" data-id="${b.id}"${b.odd ? ' class="odd" title="다른 증권사와 5배 이상 차이 — 원문 요약의 단위 표기를 확인하세요(평균에서 제외)"' : ''}>${b.odd ? '⚠ ' : ''}${esc(b.broker)} <b>${fmtVal(b.value, '')}</b></a>`).join('')}</td>
         </tr>`).join('')}</tbody></table></div>`;
@@ -270,7 +282,7 @@ function revisionBlock(g) {
     } else v = `<span class="muted">${hasPct ? '절대값 미기재' : '수치 미기재'}</span>`;
     const tag = r.src === 'calc' ? `<span class="src-tag" title="원문에 기존값이 없어 같은 증권사 직전 리포트 값과 비교해 계산">직전 대비 계산</span>`
       : r.calc === 'value' ? `<span class="src-tag" title="원문 변화율 × 직전 리포트 값으로 계산한 값">값은 계산</span>` : '';
-    return `<div class="rv-row" title="${esc(r.raw || '')}">
+    return `<div class="rv-row${r.latest === false ? ' old' : ''}" title="${r.latest === false ? '같은 증권사의 이전 리비전(평균에서 제외) — ' : ''}${esc(r.raw || '')}">
       <span class="rv-b">${chip(r.id, esc(r.broker))}<small>${r.date.slice(5)}</small></span>
       <span class="rv-v">${v}${tag}</span>
       <span class="rv-bar">${hasPct ? `<i class="${r.pct >= 0 ? 'p' : 'n'}" style="${r.pct >= 0 ? 'left:50%' : `left:${50 - w}%`};width:${w}%"></i>` : ''}</span>
@@ -279,7 +291,7 @@ function revisionBlock(g) {
   }).join('');
   return `<div class="rv">
     <div class="rv-h"><b>${g.period ? perName(g.period) + ' ' : ''}${esc(g.item)}</b>
-      <span>${g.avg != null ? `평균 <b class="${pctCls(g.avg)}">${pctTxt(g.avg)}</b> · ` : ''}<span class="pos">▲${g.up}</span> <span class="neg">▼${g.down}</span> · ${g.n}건</span></div>
+      <span>${g.avg != null ? `가중 평균 <b class="${pctCls(g.avg)}">${pctTxt(g.avg)}</b> · ` : ''}<span class="pos">▲${g.up}</span> <span class="neg">▼${g.down}</span> · ${g.n}곳</span></div>
     ${rows}</div>`;
 }
 
@@ -290,7 +302,7 @@ function renderForward() {
 
   // ① 추정치 리비전: 연간·선행(28E → 27E → 12M Fwd → 26E) 먼저, 분기·기간 미상은 접어 둔다
   const annual = a.revisions.filter(g => g.kind === 'annual'), other = a.revisions.filter(g => g.kind !== 'annual');
-  html += `<h3 class="h3" style="margin-top:0">추정치 리비전 <span class="sub">연간·선행 추정치를 바꾼 기록 · 행에 마우스를 올리면 원문 구절</span></h3>`;
+  html += `<h3 class="h3" style="margin-top:0">추정치 리비전 <span class="sub">연간·선행 추정치를 바꾼 기록 · 평균은 증권사별 가장 최근 리비전을 최근일수록 크게 반영 · 흐린 행 = 같은 증권사의 이전 리비전 · 행에 마우스를 올리면 원문 구절</span></h3>`;
   if (annual.length) {
     const head = annual.slice(0, 6), rest = annual.slice(6);
     html += `<div class="rv-grid">${head.map(revisionBlock).join('')}</div>`;
@@ -324,7 +336,7 @@ function renderForward() {
     html += `<div class="cm">${a.current.map(c => `<div>
         <span class="k">현재가 기준 ${perName(c.period)} ${c.label}</span>
         <b>${fmtVal(c.multiple, '배')}</b>
-        <span class="muted">${c.item} 평균 ${fmt(c.base)}원 · ${c.n}개사</span>
+        <span class="muted">${c.item} 가중 평균 ${fmt(c.base)}원 · ${c.n}개사</span>
         <span>${applied(c.label, c.period)}</span></div>`).join('')}</div>`;
   }
 

@@ -2,3 +2,5 @@ raw/
 __pycache__/
 *.pyc
 analyze_test.log
+bench/
+logs/
