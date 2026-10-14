@@ -205,7 +205,8 @@ function renderConsensus() {
           <td class="chips">${t.brokers.map(b => `<a href="#r${b.id}" data-id="${b.id}"${b.odd ? ' class="odd" title="다른 증권사와 5배 이상 차이 — 원문 요약의 단위 표기를 확인하세요(평균에서 제외)"' : ''}>${b.odd ? '⚠ ' : ''}${esc(b.broker)} <b>${fmtVal(b.value, '')}</b></a>`).join('')}</td>
         </tr>`).join('')}</tbody></table></div>`;
     if (a.overall?.view?.length) html += `<h3 class="h3">통합 의견</h3>${bullets(a.overall.view)}`;
-    html += `<div class="ai-note">숫자·의견 정리는 아래 리포트 로그 원문에서 AI가 추출 (${esc(a.generated)}). 숫자는 원문 구절과 대조해 확인된 것만 표시</div>`;
+    const cv = a.coverage;
+    html += `<div class="ai-note">숫자·의견 정리는 아래 리포트 로그 원문에서 AI가 추출 (${esc(a.generated)}). 숫자는 원문 구절과 대조해 확인된 것만 표시${cv ? `<br>처리 범위: 요약 ${cv.lines}줄(숫자 포함 ${cv.numeric}줄) 중 ${cv.lines - cv.missing.length}줄 처리 — 추출 ${cv.with_items}줄 · 해당 없음 ${cv.skipped}줄${cv.retried ? ` · 재질문 ${cv.retried}줄` : ''}${cv.missing.length ? ` · <b class="odd-txt">미처리 ${cv.missing.length}줄</b>` : ''}` : ''}</div>`;
   } else {
     html += `<div class="ai-note">증권사 추정치·의견 AI 정리는 아직 준비 중이에요</div>`;
   }
@@ -224,19 +225,29 @@ function money(v, unit, withUnit) {
 }
 const chip = (id, txt) => `<a class="mini" href="#r${id}" data-id="${id}">${txt}</a>`;
 
+const SRC = {stated: '', pct: '변화율', dir: '방향만', calc: '계산'};
 function revisionBlock(g) {
   const rows = g.rows.map(r => {
-    const w = Math.min(Math.abs(r.pct), 40) / 40 * 50;
-    return `<div class="rv-row">
+    const hasPct = r.pct != null;
+    const w = hasPct ? Math.min(Math.abs(r.pct), 40) / 40 * 50 : 0;
+    // 값: 기존→변경이 있으면 그대로, 변화율만 있으면 '수치 미기재', 방향만이면 화살표만
+    let v;
+    if (r.prev != null && r.value != null) {
+      const approx = r.calc === 'value' ? '≈' : '';
+      v = `${money(r.prev, r.unit, false)} → <b>${approx}${money(r.value, r.unit, true)}</b>`;
+    } else v = `<span class="muted">${hasPct ? '절대값 미기재' : '수치 미기재'}</span>`;
+    const tag = r.src === 'calc' ? `<span class="src-tag" title="원문에 기존값이 없어 같은 증권사 직전 리포트 값과 비교해 계산">직전 대비 계산</span>`
+      : r.calc === 'value' ? `<span class="src-tag" title="원문 변화율 × 직전 리포트 값으로 계산한 값">값은 계산</span>` : '';
+    return `<div class="rv-row" title="${esc(r.raw || '')}">
       <span class="rv-b">${chip(r.id, esc(r.broker))}<small>${r.date.slice(5)}</small></span>
-      <span class="rv-v">${money(r.prev, r.unit, false)} → <b>${money(r.value, r.unit, true)}</b></span>
-      <span class="rv-bar"><i class="${r.pct >= 0 ? 'p' : 'n'}" style="${r.pct >= 0 ? 'left:50%' : `left:${50 - w}%`};width:${w}%"></i></span>
-      <span class="rv-p ${pctCls(r.pct)}">${pctTxt(r.pct)}</span>
+      <span class="rv-v">${v}${tag}</span>
+      <span class="rv-bar">${hasPct ? `<i class="${r.pct >= 0 ? 'p' : 'n'}" style="${r.pct >= 0 ? 'left:50%' : `left:${50 - w}%`};width:${w}%"></i>` : ''}</span>
+      <span class="rv-p ${hasPct ? pctCls(r.pct) : (r.dir === 'up' ? 'pos' : 'neg')}">${hasPct ? pctTxt(r.pct) : (r.dir === 'up' ? '▲' : '▼')}</span>
     </div>`;
   }).join('');
   return `<div class="rv">
-    <div class="rv-h"><b>${perName(g.period)} ${esc(g.item)}</b>
-      <span>평균 <b class="${pctCls(g.avg)}">${pctTxt(g.avg)}</b> · <span class="pos">▲${g.up}</span> <span class="neg">▼${g.down}</span> · ${g.n}건</span></div>
+    <div class="rv-h"><b>${g.period ? perName(g.period) + ' ' : ''}${esc(g.item)}</b>
+      <span>${g.avg != null ? `평균 <b class="${pctCls(g.avg)}">${pctTxt(g.avg)}</b> · ` : ''}<span class="pos">▲${g.up}</span> <span class="neg">▼${g.down}</span> · ${g.n}건</span></div>
     ${rows}</div>`;
 }
 
@@ -245,27 +256,28 @@ function renderForward() {
   if (!a || !a.revisions) { el.innerHTML = '<div class="ai-note" style="margin:0">AI 정리 준비 중이에요</div>'; return; }
   let html = '';
 
-  // ① 추정치 리비전 (28E → 27E → 12M Fwd → 26E)
-  const rv = a.revisions;
-  html += `<h3 class="h3" style="margin-top:0">추정치 리비전 <span class="sub">리포트에 '기존 → 변경'이 함께 적힌 연간·선행 추정치</span></h3>`;
-  if (rv.length) {
-    const head = rv.slice(0, 6), rest = rv.slice(6);
+  // ① 추정치 리비전: 연간·선행(28E → 27E → 12M Fwd → 26E) 먼저, 분기·기간 미상은 접어 둔다
+  const annual = a.revisions.filter(g => g.kind === 'annual'), other = a.revisions.filter(g => g.kind !== 'annual');
+  html += `<h3 class="h3" style="margin-top:0">추정치 리비전 <span class="sub">연간·선행 추정치를 바꾼 기록 · 행에 마우스를 올리면 원문 구절</span></h3>`;
+  if (annual.length) {
+    const head = annual.slice(0, 6), rest = annual.slice(6);
     html += `<div class="rv-grid">${head.map(revisionBlock).join('')}</div>`;
-    if (rest.length) html += `<details class="more"><summary>리비전 ${rest.length}개 더 보기</summary><div class="rv-grid">${rest.map(revisionBlock).join('')}</div></details>`;
-  } else html += `<div class="ai-note" style="margin:0">로그에 기존→변경 추정치가 적힌 리포트가 없어요</div>`;
+    if (rest.length) html += `<details class="more"><summary>연간 리비전 ${rest.length}개 더 보기</summary><div class="rv-grid">${rest.map(revisionBlock).join('')}</div></details>`;
+  } else html += `<div class="ai-note" style="margin:0">로그에 연간·선행 추정치 변경 기록이 없어요</div>`;
+  if (other.length) html += `<details class="more"><summary>분기·기간 미기재 리비전 ${other.length}개</summary><div class="rv-grid">${other.map(revisionBlock).join('')}</div></details>`;
+  html += `<div class="ai-note">출처 — 표시 없음: 원문 기존→변경 값 · 변화율/방향만: 원문에 절대값 없음 · 직전 대비 계산·값은 계산: 같은 증권사 직전 리포트 값으로 코드가 계산</div>`;
 
   // ② 목표가 근거 연도 + 현재가 기준 배수
-  const latest = {};
-  (a.basis || []).forEach(b => { if (!latest[b.broker] || b.id > latest[b.broker].id) latest[b.broker] = b; });
-  const bs = Object.values(latest).sort((x, y) => y.id - x.id);
-  html += `<h3 class="h3">목표가는 어느 해를 보고 있나 <span class="sub">증권사별 가장 최근 리포트의 산정 근거</span></h3>`;
+  const bs = a.basis_latest || [];
+  const yearTxt = b => !b.year ? '-' : perName(b.year) + (b.year_src === '문맥' ? '<small class="muted">(문맥)</small>' : '');
+  html += `<h3 class="h3">목표가는 어느 해를 보고 있나 <span class="sub">증권사별 가장 최근 리포트의 산정 근거 · (문맥) = 줄에 연도가 없어 같은 증권사 리포트 문맥으로 판단, 마우스를 올리면 근거 구절</span></h3>`;
   if (bs.length) {
     const yc = {};
-    bs.forEach(b => { const k = b.year ? perName(b.year) : '미기재'; yc[k] = (yc[k] || 0) + 1; });
+    bs.forEach(b => { const k = b.year ? perName(b.year) + (b.year_src === '문맥' ? '(문맥)' : '') : '미기재'; yc[k] = (yc[k] || 0) + 1; });
     html += `<div class="yr">${Object.entries(yc).sort().reverse().map(([k, n]) => `<span><b>${k}</b> ${n}곳</span>`).join('')}</div>`;
     html += `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>증권사</th><th>기준</th><th>방식</th><th class="r">적용 배수</th><th class="r">기준값</th></tr></thead><tbody>
       ${bs.map(b => `<tr><td>${chip(b.id, esc(b.broker))} <small class="muted">${b.date.slice(5, 10)}</small></td>
-        <td>${b.year ? perName(b.year) : '-'}</td><td>${esc(b.method || '-')}</td>
+        <td${b.year_ctx ? ` title="문맥 근거: ${esc(b.year_ctx)}"` : ''}>${yearTxt(b)}</td><td>${esc(b.method || '-')}</td>
         <td class="r">${b.multiple != null ? fmtVal(b.multiple, '배') : '-'}</td>
         <td class="r">${b.base_value != null ? `${esc(b.base_item)} ${fmtVal(b.base_value, b.base_unit)}` : '-'}</td></tr>`).join('')}
     </tbody></table></div>`;
