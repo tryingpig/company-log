@@ -50,7 +50,13 @@ SYSTEM = """너는 증권사 리포트 요약 로그를 읽고 팩트만 구조�
 출력은 JSON 객체 하나만(코드펜스·설명 없이):
 {
   "metrics": [
-    {"id": 리포트번호, "item": "항목", "period": "기간", "value": 숫자, "unit": "단위", "raw": "원문 구절"}
+    {"id": 리포트번호, "item": "항목", "period": "기간", "value": 숫자, "prev": 숫자|null, "unit": "단위", "raw": "원문 구절"}
+  ],
+  "basis": [
+    {"id": 리포트번호, "year": "기준 기간", "method": "PER", "multiple": 숫자|null, "base_item": "EPS", "base_value": 숫자|null, "base_unit": "원", "raw": "원문 구절"}
+  ],
+  "timeline": [
+    {"id": 리포트번호, "when": "시점", "event": "앞으로 일어날 일 한 줄", "raw": "원문 구절"}
   ],
   "brokers": [
     {"broker": "증권사명", "numbers": ["숫자 중심 한 줄", ...], "view": ["의견 한 줄", ...]}
@@ -71,7 +77,22 @@ metrics (리포트별 숫자 추출):
 - period: 분기는 "3Q26", 연간은 "2026", 12개월 선행은 "12M Fwd". 추정 표시(E/F)는 떼고, 알 수 없으면 "".
 - value 는 원문 숫자를 그대로 숫자로(1.6조원 → 1.6, unit "조원" / 2,406십억원 → 2406, unit "십억원" / 15배 → 15, unit "배").
 - 증감률(+0.7%yoy 등)만 있고 절대값이 없으면 넣지 않는다. 절대값 옆의 증감률은 raw 에 같이 남긴다.
+- prev: 같은 구절에 '기존/직전/이전 추정치'가 함께 적혀 있으면 그 값(같은 단위). 예: "2027E EPS 37,656원으로 기존 42,964원 대비"
+  → value 37656, prev 42964. "14,697십억원에서 11,209십억원으로" → value 11209, prev 14697. 없으면 null.
 - raw 는 그 리포트 본문에서 해당 숫자가 나온 구절을 '글자 그대로' 복사한다(15~60자). 바꾸면 검증에서 버려진다.
+
+basis (목표가 산정 근거 — 리포트마다, 본문에 적혀 있을 때만):
+- year: 목표가 산정에 쓴 실적의 기간("2027", "2028", "12M Fwd", "2026"). 적혀 있지 않으면 "".
+- method: "PER", "PBR", "EV/EBITDA", "SOTP", "DCF" 등. multiple: 적용 배수(없으면 null).
+- base_item/base_value/base_unit: 배수를 곱한 기준값(예: EPS 44,796원 → "EPS", 44796, "원"). 없으면 null.
+- raw: 근거가 적힌 구절 글자 그대로.
+
+timeline (앞으로의 일정·동인):
+- 리포트 날짜 이후에 일어날 것으로 적힌 일만: 출시·착공·양산·수주·인도·준공·임상 발표·가이던스 시점 등.
+  이미 지나간 실적(2Q26 매출 등)은 넣지 않는다.
+- when: 가능한 정확히 "4Q26", "2H26", "1H27", "2027", "2028~2030" 형식. 리포트 날짜 기준 "연내"는 그 해("2026")로.
+- event: 무엇이 일어나는지 + 숫자가 있으면 숫자, 40자 안팎. 증권사 전망이면 "~전망"으로.
+- raw: 근거 구절 글자 그대로.
 
 brokers (증권사별, 그 증권사의 모든 리포트를 시간순으로 본 뒤 현재 입장):
 - numbers: 그 증권사가 제시한 핵심 숫자를 먼저 쓴다(실적 추정, 적용 멀티플, 목표가 산정 근거). 2~4줄.
@@ -150,10 +171,138 @@ def verify_metrics(metrics, reports):
         if not (r and raw and _squash(raw) in body and num_ok):
             dropped += 1
             continue
+        prev = m.get("prev")
+        try:
+            prev = float(prev) if prev is not None else None
+        except (TypeError, ValueError):
+            prev = None
+        if prev is not None and not _num_in(prev, raw):     # 기존값도 원문 구절에 있어야 한다
+            prev = None
         kept.append({"id": r["id"], "broker": r["broker"], "date": r["date"],
                      "item": str(m.get("item") or "").strip(), "period": str(m.get("period") or "").strip(),
-                     "value": val, "unit": str(m.get("unit") or "").strip(), "raw": raw})
+                     "value": val, "prev": prev, "unit": str(m.get("unit") or "").strip(), "raw": raw})
     return kept, dropped
+
+
+def _num_in(v, raw):
+    return any(abs(float(x.replace(",", "")) - v) < 1e-9
+               for x in re.findall(r"\d[\d,]*\.?\d*", raw) if x.replace(",", "").replace(".", "").isdigit())
+
+
+def _raw_ok(item, by_id):
+    r = by_id.get(item.get("id"))
+    raw = str(item.get("raw") or "")
+    return r if (r and raw and _squash(raw) in _squash(r["summary"] + r["title"])) else None
+
+
+def verify_basis(basis, reports):
+    by_id, out = {r["id"]: r for r in reports}, []
+    for b in basis or []:
+        r = _raw_ok(b, by_id)
+        if not r:
+            continue
+
+        def num(k):
+            try:
+                v = float(b.get(k))
+                return v if _num_in(v, b["raw"]) else None
+            except (TypeError, ValueError):
+                return None
+        out.append({"id": r["id"], "broker": r["broker"], "date": r["date"],
+                    "year": str(b.get("year") or "").strip(), "method": str(b.get("method") or "").strip(),
+                    "multiple": num("multiple"), "base_item": str(b.get("base_item") or "").strip(),
+                    "base_value": num("base_value"), "base_unit": str(b.get("base_unit") or "").strip(),
+                    "raw": b["raw"]})
+    return out
+
+
+def _when_key(w):
+    """'4Q26'·'2H27'·'1H27'·'2027'·'2028~2030' → 정렬용 숫자. 모르면 맨 뒤."""
+    w = w.replace(" ", "")
+    m = re.match(r"([1-4])Q(\d{2})", w)
+    if m:
+        return 2000 + int(m.group(2)) + (int(m.group(1)) - 1) * 0.25
+    m = re.match(r"([12])H(\d{2})", w)
+    if m:
+        return 2000 + int(m.group(2)) + (int(m.group(1)) - 1) * 0.5
+    m = re.search(r"(20\d{2})", w)
+    if m:
+        return int(m.group(1)) + 0.9          # 연 단위는 그 해 반기·분기 일정 뒤에
+    return 9999
+
+
+def verify_timeline(tl, reports):
+    by_id, out = {r["id"]: r for r in reports}, []
+    for t in tl or []:
+        r = _raw_ok(t, by_id)
+        if not r or not str(t.get("event") or "").strip():
+            continue
+        w = str(t.get("when") or "").strip()
+        out.append({"id": r["id"], "broker": r["broker"], "date": r["date"][:10], "when": w,
+                    "key": _when_key(w), "event": str(t["event"]).strip(), "raw": t["raw"]})
+    out.sort(key=lambda x: (x["key"], x["date"]))
+    return out
+
+
+def _period_key(p):
+    """앞을 보는 순서: 28E → 27E → 12M Fwd → 26E. 분기·반기는 제외(None)."""
+    if "Q" in p or "H" in p:
+        return None
+    if "Fwd" in p:
+        return 2026.5
+    m = re.fullmatch(r"(20\d{2})", p)
+    return int(m.group(1)) if m else None
+
+
+def build_revisions(metrics):
+    """기존→변경 값이 함께 적힌 연간·선행 추정치. (항목, 기간)별로 증권사·날짜별 변화율."""
+    groups = {}
+    for m in metrics:
+        if m.get("prev") in (None, 0) or _period_key(m["period"]) is None:
+            continue
+        pct = round((m["value"] - m["prev"]) / abs(m["prev"]) * 100, 1)
+        if abs(pct) > 80:          # 단위 오타·항목 혼동으로 보이는 값은 뺀다
+            continue
+        groups.setdefault((m["item"], m["period"]), []).append(
+            {"broker": m["broker"], "date": m["date"][:10], "id": m["id"],
+             "prev": m["prev"], "value": m["value"], "unit": m["unit"], "pct": pct})
+    out = []
+    for (item, period), rows in groups.items():
+        rows.sort(key=lambda x: x["date"], reverse=True)
+        pcts = [r["pct"] for r in rows]
+        out.append({"item": item, "period": period, "n": len(rows),
+                    "avg": round(sum(pcts) / len(pcts), 1),
+                    "up": sum(p > 0 for p in pcts), "down": sum(p < 0 for p in pcts), "rows": rows})
+    order = ["매출액", "영업이익", "지배순이익", "순이익", "EPS", "EBITDA", "BPS"]
+    out.sort(key=lambda g: (-_period_key(g["period"]),
+                            order.index(g["item"]) if g["item"] in order else 99, -g["n"]))
+    return out
+
+
+def current_multiples(metrics, close):
+    """현재가 ÷ 연도별 EPS·BPS(증권사별 최신값 평균, 원 단위) → 현재가 기준 PER·PBR."""
+    if not close:
+        return []
+    latest = {}
+    for m in metrics:
+        if m["item"] not in ("EPS", "BPS") or m["unit"] not in ("원", "") or _period_key(m["period"]) is None:
+            continue
+        k = (m["item"], m["period"], m["broker"])
+        if k not in latest or m["id"] > latest[k]["id"]:
+            latest[k] = m
+    agg = {}
+    for (item, period, _), m in latest.items():
+        if m["value"] > 0:
+            agg.setdefault((item, period), []).append(m["value"])
+    out = []
+    for (item, period), vals in agg.items():
+        med = sorted(vals)[len(vals) // 2]
+        vals = [v for v in vals if 0.2 < v / med < 5]
+        avg = sum(vals) / len(vals)
+        out.append({"item": item, "period": period, "n": len(vals), "base": round(avg),
+                    "label": ("PER" if item == "EPS" else "PBR"), "multiple": round(close / avg, 2)})
+    out.sort(key=lambda x: (x["item"], -_period_key(x["period"])))
+    return out
 
 
 KRW = {"조원": 10000, "십억원": 10, "억원": 1, "백만원": 0.01}
@@ -234,13 +383,18 @@ def analyze(code, force=False):
                     for b in res.get("brokers") or [] if b.get("broker")},
         "flips": {str(f["id"]): f.get("note", "") for f in res.get("flips") or [] if f.get("id") in flip_ids},
         "table": build_table(metrics),
+        "revisions": build_revisions(metrics),
+        "basis": verify_basis(res.get("basis"), d["reports"]),
+        "timeline": verify_timeline(res.get("timeline"), d["reports"]),
+        "current": current_multiples(metrics, d.get("close")),
         "metrics": metrics,
         "dropped": dropped,
     }
     OUT.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"{code} {d['name']}: 완료 {time.time() - t0:.0f}초 · 숫자 {len(metrics)}개(버림 {dropped}) · "
-          f"비교표 {len(out['table'])}행 · 증권사 {len(out['brokers'])} · 전환 {len(out['flips'])}/{len(flip_ids)}")
+          f"비교표 {len(out['table'])}행 · 리비전 {len(out['revisions'])} · 근거 {len(out['basis'])} · "
+          f"일정 {len(out['timeline'])} · 증권사 {len(out['brokers'])} · 전환 {len(out['flips'])}/{len(flip_ids)}")
     return True
 
 

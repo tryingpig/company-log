@@ -26,6 +26,9 @@
   <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>
   <div class="panel pad" id="consensus"></div>
 
+  <h2 class="sec">앞을 보는 숫자 <span class="sub">27E·28E 추정치 변화 · 목표가 근거 · 앞으로의 일정</span></h2>
+  <div class="panel pad" id="forward"></div>
+
   <h2 class="sec">증권사별 의견 <span class="sub" id="brkSub"></span></h2>
   <div class="panel" id="brokers"></div>
 
@@ -209,6 +212,81 @@ function renderConsensus() {
   el.innerHTML = html;
 }
 
+/* ── 앞을 보는 숫자 ── */
+const perName = p => /^20\d\d$/.test(p) ? `${p.slice(2)}E` : p;   // 2027 → 27E
+const chip = (id, txt) => `<a class="mini" href="#r${id}" data-id="${id}">${txt}</a>`;
+
+function revisionBlock(g) {
+  const rows = g.rows.map(r => {
+    const w = Math.min(Math.abs(r.pct), 40) / 40 * 50;
+    return `<div class="rv-row">
+      <span class="rv-b">${chip(r.id, esc(r.broker))}<small>${r.date.slice(5)}</small></span>
+      <span class="rv-v">${fmtVal(r.prev, '')} → <b>${fmtVal(r.value, r.unit)}</b></span>
+      <span class="rv-bar"><i class="${r.pct >= 0 ? 'p' : 'n'}" style="${r.pct >= 0 ? 'left:50%' : `left:${50 - w}%`};width:${w}%"></i></span>
+      <span class="rv-p ${pctCls(r.pct)}">${pctTxt(r.pct)}</span>
+    </div>`;
+  }).join('');
+  return `<div class="rv">
+    <div class="rv-h"><b>${perName(g.period)} ${esc(g.item)}</b>
+      <span>평균 <b class="${pctCls(g.avg)}">${pctTxt(g.avg)}</b> · <span class="pos">▲${g.up}</span> <span class="neg">▼${g.down}</span> · ${g.n}건</span></div>
+    ${rows}</div>`;
+}
+
+function renderForward() {
+  const el = document.getElementById('forward'), a = analysis;
+  if (!a || !a.revisions) { el.innerHTML = '<div class="ai-note" style="margin:0">AI 정리 준비 중이에요</div>'; return; }
+  let html = '';
+
+  // ① 추정치 리비전 (28E → 27E → 12M Fwd → 26E)
+  const rv = a.revisions;
+  html += `<h3 class="h3" style="margin-top:0">추정치 리비전 <span class="sub">리포트에 '기존 → 변경'이 함께 적힌 연간·선행 추정치</span></h3>`;
+  if (rv.length) {
+    const head = rv.slice(0, 6), rest = rv.slice(6);
+    html += `<div class="rv-grid">${head.map(revisionBlock).join('')}</div>`;
+    if (rest.length) html += `<details class="more"><summary>리비전 ${rest.length}개 더 보기</summary><div class="rv-grid">${rest.map(revisionBlock).join('')}</div></details>`;
+  } else html += `<div class="ai-note" style="margin:0">로그에 기존→변경 추정치가 적힌 리포트가 없어요</div>`;
+
+  // ② 목표가 근거 연도 + 현재가 기준 배수
+  const latest = {};
+  (a.basis || []).forEach(b => { if (!latest[b.broker] || b.id > latest[b.broker].id) latest[b.broker] = b; });
+  const bs = Object.values(latest).sort((x, y) => y.id - x.id);
+  html += `<h3 class="h3">목표가는 어느 해를 보고 있나 <span class="sub">증권사별 가장 최근 리포트의 산정 근거</span></h3>`;
+  if (bs.length) {
+    const yc = {};
+    bs.forEach(b => { const k = b.year ? perName(b.year) : '미기재'; yc[k] = (yc[k] || 0) + 1; });
+    html += `<div class="yr">${Object.entries(yc).sort().reverse().map(([k, n]) => `<span><b>${k}</b> ${n}곳</span>`).join('')}</div>`;
+    html += `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>증권사</th><th>기준</th><th>방식</th><th class="r">적용 배수</th><th class="r">기준값</th></tr></thead><tbody>
+      ${bs.map(b => `<tr><td>${chip(b.id, esc(b.broker))} <small class="muted">${b.date.slice(5, 10)}</small></td>
+        <td>${b.year ? perName(b.year) : '-'}</td><td>${esc(b.method || '-')}</td>
+        <td class="r">${b.multiple != null ? fmtVal(b.multiple, '배') : '-'}</td>
+        <td class="r">${b.base_value != null ? `${esc(b.base_item)} ${fmtVal(b.base_value, b.base_unit)}` : '-'}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  } else html += `<div class="ai-note" style="margin:0">로그에 산정 근거가 적힌 리포트가 없어요</div>`;
+
+  // 현재가 기준 배수 vs 증권사 적용 배수
+  if (a.current?.length) {
+    const applied = (label, period) => {
+      const v = bs.filter(b => b.method === label && b.year === period && b.multiple != null).map(b => b.multiple);
+      return v.length ? `증권사 적용 ${label} 평균 <b>${fmtVal(v.reduce((s, x) => s + x, 0) / v.length, '배')}</b> (${v.length}곳)` : '';
+    };
+    html += `<div class="cm">${a.current.map(c => `<div>
+        <span class="k">현재가 기준 ${perName(c.period)} ${c.label}</span>
+        <b>${fmtVal(c.multiple, '배')}</b>
+        <span class="muted">${c.item} 평균 ${fmt(c.base)}원 · ${c.n}개사</span>
+        <span>${applied(c.label, c.period)}</span></div>`).join('')}</div>`;
+  }
+
+  // ③ 앞으로의 일정
+  html += `<h3 class="h3">앞으로의 일정·동인 <span class="sub">로그에 적힌 미래 시점 언급, 시간순</span></h3>`;
+  html += (a.timeline || []).length ? `<ol class="tl">${a.timeline.map(t => `<li>
+      <span class="when">${esc(t.when || '시점 미기재')}</span>
+      <span class="ev">${esc(t.event)}</span>
+      <span class="src">${chip(t.id, esc(t.broker))}</span></li>`).join('')}</ol>`
+    : `<div class="ai-note" style="margin:0">로그에 미래 일정 언급이 없어요</div>`;
+
+  el.innerHTML = html;
+}
+
 /* ── 증권사별 ── */
 function renderBrokers() {
   const el = document.getElementById('brokers');
@@ -324,7 +402,7 @@ Promise.all([
 ])
   .then(([d, a]) => {
     data = d; analysis = a;
-    renderHead(); drawChart(); renderConsensus(); renderBrokers(); renderLog();
+    renderHead(); drawChart(); renderConsensus(); renderForward(); renderBrokers(); renderLog();
   })
   .catch(() => { document.getElementById('name').textContent = '종목을 찾을 수 없어요'; });
 </script>
