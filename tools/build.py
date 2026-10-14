@@ -30,6 +30,7 @@ DATA = ROOT / "data"
 STOCKS = DATA / "stocks"
 NAMES = DATA / "_names.json"          # 종목명 → 코드 캐시 (못 찾은 것은 null)
 UNIVERSE = Path(r"C:\ClaudeCode\EpicAI-Monitor\_universe.json")
+ALIASES = Path(__file__).with_name("aliases.json")
 
 BARS = 150                            # 6개월(약 124거래일) + 20일선·볼린저 워밍업
 UA = {"User-Agent": "Mozilla/5.0"}
@@ -82,6 +83,7 @@ def parse(m):
         "opinion": p.group(3).strip(),
         "broker": p.group(4).strip(),
         "summary": s.group(1).strip() if s else "",
+        "foreign": bool(re.search(r"USD|EUR|JPY|HKD|CNY|TWD|GBP|달러|엔|위안", p.group(2))),   # 311USD 처럼 외화 목표가 = 해외 종목 ("NONE" 표기는 국내)
     }
 
 
@@ -95,11 +97,15 @@ def resolve_codes(names):
     DATA.mkdir(parents=True, exist_ok=True)
     cache = json.loads(NAMES.read_text(encoding="utf-8")) if NAMES.exists() else {}
     uni = {}
+    aliases = json.loads(ALIASES.read_text(encoding="utf-8")) if ALIASES.exists() else {}
     if UNIVERSE.exists():
         for code, v in json.loads(UNIVERSE.read_text(encoding="utf-8")).items():
             uni[_norm(v["name"])] = code
     for name in names:
-        if cache.get(name):
+        if name in aliases:                 # 사명 변경 등 수동 연결이 우선
+            cache[name] = aliases[name]
+            continue
+        if cache.get(name):                 # 못 찾은 이름(None)은 매번 다시 조회
             continue
         code = uni.get(_norm(name))
         if not code:
@@ -144,7 +150,7 @@ def fetch_bars(code):
 
 # ── 증권사별 집계 (코드 계산 — 로그에 적힌 목표가만 쓴다) ──────────────────────
 
-CONSENSUS_DAYS = 183     # 통합 목표가에는 최근 6개월 안에 낸 증권사 최신 목표가만 넣는다
+WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·전환·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
 
 
 def _gap(target, close):
@@ -152,7 +158,13 @@ def _gap(target, close):
 
 
 def summarize_brokers(reps, close):
-    """reps: 최신순. 증권사별 최신 목표가·괴리율, 같은 증권사 안의 상향↔하향 전환 표시, 통합 목표가."""
+    """reps: 최신순. 최근 3개월 리포트로 증권사별 최신 목표가·괴리율, 같은 증권사 안의 상향↔하향 전환, 통합 목표가."""
+    cutoff = (datetime.now(KST) - timedelta(days=WINDOW_DAYS)).strftime("%Y-%m-%d")
+    for r in reps:
+        r["win"] = r["date"][:10] >= cutoff
+        r["flip"] = False
+        r.pop("prev_dir", None)
+    reps = [r for r in reps if r["win"]]
     by_broker = {}
     for r in sorted(reps, key=lambda r: r["id"]):           # 오래된 것부터 훑어 전환을 찾는다
         prev = by_broker.get(r["broker"])
@@ -171,11 +183,11 @@ def summarize_brokers(reps, close):
             "target": last["to"], "prev_target": last["from"], "opinion": last["opinion"],
             "gap": _gap(last["to"], close),
             "flips": [r["id"] for r in mine if r.get("flip")],
+            "single": len(mine) == 1,                         # 3개월 안 1건 → 전환 판단 불가
         })
     brokers.sort(key=lambda b: b["last_id"], reverse=True)
 
-    cutoff = (datetime.now(KST) - timedelta(days=CONSENSUS_DAYS)).strftime("%Y-%m-%d")
-    tgts = sorted(b["target"] for b in brokers if b["target"] and b["last_date"][:10] >= cutoff)
+    tgts = sorted(b["target"] for b in brokers if b["target"])
     consensus = None
     if tgts:
         n = len(tgts)
@@ -183,8 +195,8 @@ def summarize_brokers(reps, close):
         mean = sum(tgts) / n
         consensus = {"n": n, "mean": round(mean), "median": round(med), "max": tgts[-1], "min": tgts[0],
                      "gap_mean": _gap(mean, close), "gap_median": _gap(med, close),
-                     "up": sum(1 for b in brokers if b["last_date"][:10] >= cutoff and b["last_dir"] == "up"),
-                     "days": CONSENSUS_DAYS}
+                     "up": sum(1 for b in brokers if b["last_dir"] == "up"),
+                     "days": WINDOW_DAYS}
     return brokers, consensus
 
 
@@ -192,6 +204,10 @@ def main():
     no_price = "--no-price" in sys.argv
     msgs = load_messages()
     reports = [r for r in (parse(m) for m in msgs) if r]
+    foreign = sorted({r["name"] for r in reports if r["foreign"]})
+    if foreign:
+        print(f"해외 종목 제외 {len(foreign)}개: {foreign}")
+    reports = [r for r in reports if not r.pop("foreign")]
     research = sum(1 for m in msgs if m["text"].startswith("[✨ 리서치 요약]"))
     print(f"메시지 {len(msgs)}건 / 리서치 요약 {research}건 / 파싱 {len(reports)}건")
 
@@ -222,6 +238,7 @@ def main():
         old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         bars = prices.get(code) or old.get("prices", [])   # 수집 실패 시 기존 값 유지
         reps = sorted(v["reports"], key=lambda r: r["id"], reverse=True)
+        v["name"] = reps[0]["name"]                          # 사명이 바뀌었으면 최근 이름으로
         for r in reps:
             r.pop("name", None)
         close = bars[-1]["c"] if bars else None
@@ -236,7 +253,8 @@ def main():
                       "up": sum(r["dir"] == "up" for r in reps),
                       "down": sum(r["dir"] == "down" for r in reps),
                       "last_date": last["date"], "last_dir": last["dir"],
-                      "last_broker": last["broker"], "last_to": last["to"]})
+                      "last_broker": last["broker"], "last_to": last["to"],
+                      "win_count": sum(r["win"] for r in reps)})
     index.sort(key=lambda x: x["last_date"], reverse=True)
     (DATA / "index.json").write_text(json.dumps({"updated": now, "stocks": index},
                                                 ensure_ascii=False, separators=(",", ":")),

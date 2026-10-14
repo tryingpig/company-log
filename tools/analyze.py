@@ -549,7 +549,11 @@ async def analyze_async(d):
 
 def analyze(code, force=False):
     d = json.loads((STOCKS / f"{code}.json").read_text(encoding="utf-8"))
+    d["reports"] = [r for r in d["reports"] if r.get("win")]      # AI 정리는 최근 3개월 리포트만
     out_path = OUT / f"{code}.json"
+    if not d["reports"]:
+        print(f"{code} {d['name']}: 최근 3개월 리포트 없음, 건너뜀")
+        return True
     s = sig(d["reports"])
     if not force and out_path.exists() and json.loads(out_path.read_text(encoding="utf-8")).get("sig") == s:
         print(f"{code} {d['name']}: 변경 없음, 건너뜀")
@@ -607,6 +611,7 @@ def main():
             if "revision_items" not in a:
                 continue
             d = json.loads((STOCKS / p.name).read_text(encoding="utf-8"))
+            d["reports"] = [r for r in d["reports"] if r.get("win")]
             by_id = {r["id"]: r for r in d["reports"]}
             for b in a.get("basis", []):          # 문맥 연도는 같은 리포트 안 근거만 인정
                 r = by_id.get(b["id"])
@@ -619,7 +624,7 @@ def main():
     if "--all" in args:
         mn = int(args[args.index("--min") + 1]) if "--min" in args else 1
         codes = [p.stem for p in sorted(STOCKS.glob("*.json"))
-                 if len(json.loads(p.read_text(encoding="utf-8"))["reports"]) >= mn]
+                 if sum(r.get("win", False) for r in json.loads(p.read_text(encoding="utf-8"))["reports"]) >= mn]
     else:
         codes = [a for a in args if re.fullmatch(r"[0-9A-Z]{6}", a)]
     ok = sum(analyze(c, force) for c in codes)
