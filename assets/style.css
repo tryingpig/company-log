@@ -216,7 +216,7 @@ a.mini:hover { color: var(--accent); border-color: var(--accent); }
 .rv { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .rv-h { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 14px; margin-bottom: 6px; }
 .rv-h > span { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
-.rv-row { display: grid; grid-template-columns: 7.5em 1fr 64px 3.6em; gap: 8px; align-items: center;
+.rv-row { display: grid; grid-template-columns: 9.5em 1fr 56px 3.6em; gap: 8px; align-items: center;
   font-size: 13px; padding: 3px 0; font-variant-numeric: tabular-nums; }
 .rv-b small { color: var(--muted); margin-left: 4px; }
 .rv-b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -214,6 +214,14 @@ function renderConsensus() {
 
 /* ── 앞을 보는 숫자 ── */
 const perName = p => /^20\d\d$/.test(p) ? `${p.slice(2)}E` : p;   // 2027 → 27E
+// 금액은 억원으로 환산해 짧게(1조 이상은 조): 14,697십억원 → 14.7조
+const KRW = {'조원': 10000, '십억원': 10, '억원': 1, '백만원': 0.01};
+function money(v, unit, withUnit) {
+  const k = KRW[(unit || '').replace(/\s/g, '')];
+  if (!k) return fmtVal(v, withUnit ? unit : '');
+  const e = v * k;
+  return e >= 10000 ? (+(e / 10000).toFixed(2)).toLocaleString('ko-KR') + '조' : Math.round(e).toLocaleString('ko-KR') + '억';
+}
 const chip = (id, txt) => `<a class="mini" href="#r${id}" data-id="${id}">${txt}</a>`;
 
 function revisionBlock(g) {
@@ -221,7 +229,7 @@ function revisionBlock(g) {
     const w = Math.min(Math.abs(r.pct), 40) / 40 * 50;
     return `<div class="rv-row">
       <span class="rv-b">${chip(r.id, esc(r.broker))}<small>${r.date.slice(5)}</small></span>
-      <span class="rv-v">${fmtVal(r.prev, '')} → <b>${fmtVal(r.value, r.unit)}</b></span>
+      <span class="rv-v">${money(r.prev, r.unit, false)} → <b>${money(r.value, r.unit, true)}</b></span>
       <span class="rv-bar"><i class="${r.pct >= 0 ? 'p' : 'n'}" style="${r.pct >= 0 ? 'left:50%' : `left:${50 - w}%`};width:${w}%"></i></span>
       <span class="rv-p ${pctCls(r.pct)}">${pctTxt(r.pct)}</span>
     </div>`;
