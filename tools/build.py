@@ -31,7 +31,7 @@ STOCKS = DATA / "stocks"
 NAMES = DATA / "_names.json"          # 종목명 → 코드 캐시 (못 찾은 것은 null)
 UNIVERSE = Path(r"C:\ClaudeCode\EpicAI-Monitor\_universe.json")
 
-BARS = 90                             # 3개월(약 62거래일) + 20일선 워밍업
+BARS = 150                            # 6개월(약 124거래일) + 20일선·볼린저 워밍업
 UA = {"User-Agent": "Mozilla/5.0"}
 KST = timezone(timedelta(hours=9))
 

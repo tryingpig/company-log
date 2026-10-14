@@ -13,6 +13,7 @@
   --ma5: #eb6834;
   --ma10: #1baf7a;
   --ma20: #6250d6;
+  --bb: #8a8f98;
   --accent: #2a78d6;
   --imp: #8a5a00;         /* 의견 전환 = 중요 표시 */
   --imp-bg: #fff3d1;
@@ -34,6 +35,8 @@
     --ma5: #d95926;
     --ma10: #199e70;
     --ma20: #9085e9;
+  --bb: #7d838d;
+    --bb: #7d838d;
     --accent: #3987e5;
     --imp: #f0c060;
     --imp-bg: #3a2e10;
@@ -252,3 +255,6 @@ details.more summary { cursor: pointer; color: var(--text-2); font-size: 13px; m
 }
 .src-tag { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 5px; vertical-align: 1px; }
 .rv-row { cursor: default; }
+.bb-tog { font: inherit; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; cursor: pointer; }
+.bb-tog.on { color: var(--text-2); border-color: var(--bb); }
+.legend .sw.dash { background: repeating-linear-gradient(90deg, var(--bb) 0 3px, transparent 3px 5px); }

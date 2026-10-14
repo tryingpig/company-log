@@ -20,7 +20,7 @@
   <div class="panel chart-box">
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
-    <div class="chart-note">최근 3개월 일봉 · ▲ 목표가 상향 / ▼ 하향 리포트 · ⚠ 증권사 의견 전환 (마커를 누르면 해당 리포트로 이동)</div>
+    <div class="chart-note">최근 6개월 일봉 · 점선 = 볼린저 밴드(20일 ±2σ, 범례에서 켜기/끄기) · ▲ 목표가 상향 / ▼ 하향 리포트 · ⚠ 증권사 의견 전환 (마커를 누르면 해당 리포트로 이동)</div>
   </div>
 
   <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>
@@ -48,7 +48,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const code = new URLSearchParams(location.search).get('code');
 const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20']];
-let data, analysis = null, chart, candle, maSeries = [], dir = 'all';
+let data, analysis = null, chart, candle, maSeries = [], bbSeries = [], dir = 'all';
+let bbOn = false;
+try { bbOn = localStorage.getItem('cl-bb') === '1'; } catch (e) {}
 
 function sma(bars, n) {
   const out = [];
@@ -61,9 +63,22 @@ function sma(bars, n) {
   return out;
 }
 
-function threeMonthsBefore(iso) {
+// 볼린저 밴드: 20일 이동평균 ± 2 × 표준편차(모집단)
+function bollinger(bars, n = 20, k = 2) {
+  const up = [], lo = [];
+  for (let i = n - 1; i < bars.length; i++) {
+    const w = bars.slice(i - n + 1, i + 1).map(b => b.c);
+    const m = w.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(w.reduce((a, b) => a + (b - m) ** 2, 0) / n);
+    up.push({time: bars[i].d, value: Math.round(m + k * sd)});
+    lo.push({time: bars[i].d, value: Math.round(m - k * sd)});
+  }
+  return [up, lo];
+}
+
+function sixMonthsBefore(iso) {
   const d = new Date(iso + 'T00:00:00');
-  d.setMonth(d.getMonth() - 3);
+  d.setMonth(d.getMonth() - 6);
   return d.toISOString().slice(0, 10);
 }
 
@@ -72,7 +87,7 @@ function drawChart() {
   const el = document.getElementById('chart');
   const bars = data.prices;
   if (!bars.length) { el.innerHTML = '<div class="empty">주가 데이터가 없어요</div>'; return; }
-  const from = threeMonthsBefore(bars[bars.length - 1].d);
+  const from = sixMonthsBefore(bars[bars.length - 1].d);
   const vis = bars.filter(b => b.d >= from);
 
   chart = LightweightCharts.createChart(el, {
@@ -90,11 +105,19 @@ function drawChart() {
   });
   candle.setData(vis.map(b => ({time: b.d, open: b.o, high: b.h, low: b.l, close: b.c})));
 
-  // 이동평균은 전체 일봉으로 계산하고 3개월 구간만 표시
+  // 이동평균은 전체 일봉으로 계산하고 6개월 구간만 표시
   maSeries = MAS.map(([n, v]) => {
     const s = chart.addLineSeries({color: css(v), lineWidth: 2, priceLineVisible: false,
                                    lastValueVisible: false, crosshairMarkerVisible: false});
     s.setData(sma(bars, n).filter(p => p.time >= from));
+    return s;
+  });
+  // 볼린저 상·하단 (중심선은 20일선과 같아 따로 그리지 않음)
+  bbSeries = bollinger(bars).map(arr => {
+    const s = chart.addLineSeries({color: css('--bb'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+                                   priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+                                   visible: bbOn});
+    s.setData(arr.filter(p => p.time >= from));
     return s;
   });
 
@@ -135,19 +158,28 @@ function drawChart() {
 
 function updateLegend(p) {
   const bars = data.prices;
-  let bar, mas;
+  let bar, mas, bb;
   if (p) {
     const c = p.seriesData.get(candle);
     bar = c && {d: p.time, o: c.open, h: c.high, l: c.low, c: c.close};
     mas = maSeries.map(s => p.seriesData.get(s)?.value);
+    bb = bbSeries.map(s => p.seriesData.get(s)?.value);
   } else {
     bar = bars[bars.length - 1];
     mas = MAS.map(([n]) => { const a = sma(bars, n); return a[a.length - 1]?.value; });
+    bb = bollinger(bars).map(a => a[a.length - 1]?.value);
   }
   if (!bar) return;
   document.getElementById('legend').innerHTML =
     `<span class="date">${bar.d}</span><span>종가 ${fmt(bar.c)}</span>` +
-    MAS.map(([n, v], i) => `<span><span class="sw" style="background:var(${v})"></span>${n}일 ${fmt(mas[i])}</span>`).join('');
+    MAS.map(([n, v], i) => `<span><span class="sw" style="background:var(${v})"></span>${n}일 ${fmt(mas[i])}</span>`).join('') +
+    `<button type="button" class="bb-tog${bbOn ? ' on' : ''}" id="bbTog" aria-pressed="${bbOn}"><span class="sw dash"></span>볼린저 ${bbOn ? `${fmt(bb[0])} / ${fmt(bb[1])}` : '끔'}</button>`;
+  document.getElementById('bbTog').onclick = () => {
+    bbOn = !bbOn;
+    try { localStorage.setItem('cl-bb', bbOn ? '1' : '0'); } catch (e) {}
+    bbSeries.forEach(s => s.applyOptions({visible: bbOn}));
+    updateLegend(null);
+  };
 }
 
 /* ── 통합 정리 ── */
