@@ -21,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import analyze as an  # noqa: E402  (stdout 을 utf-8 로 바꿔 둔다)
+import alert  # noqa: E402
 
 ROOT = an.ROOT
 PY39 = r"C:\Users\admin\AppData\Local\Programs\Python\Python39-32\python.exe"
@@ -106,8 +107,16 @@ async def main_async():
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")
-    if st["summary_fail"] or st["missing_lines"] or st["stopped"]:
-        log("확인 필요: 의견 정리 실패·미처리 줄·시간 초과 중 하나가 있음 (다음 실행이 이어 감)")
+    problems = []
+    if st["stopped"]:
+        problems.append(f"{MAX_HOURS}시간 안에 못 끝내고 멈춤 (다음 실행이 이어 감)")
+    if st["summary_fail"]:
+        problems.append(f"의견 정리 실패 {st['summary_fail']}종목")
+    if st["missing_lines"]:
+        problems.append(f"추출 못 한 줄 {st['missing_lines']}개")
+    if problems:
+        log("확인 필요: " + " / ".join(problems))
+    return problems
 
 
 def main():
@@ -118,11 +127,22 @@ def main():
     except OSError:
         log("이전 실행이 아직 돌고 있어 건너뜀")
         return
+    code = 0
     try:
-        asyncio.run(main_async())
+        problems = asyncio.run(main_async())
     except Exception as e:
         log(f"실패: {type(e).__name__}: {e}")
-        sys.exit(1)
+        problems, code = [f"실행 실패: {type(e).__name__}: {str(e)[:200]}"], 1
+    now = datetime.now(an.KST)
+    stale = alert.collect_problem(now)
+    if stale:
+        log(stale)
+        problems.append(stale)
+    try:
+        alert.report(problems, now, f"daily_{now:%Y%m%d}.log")
+    except Exception as e:
+        log(f"알림 보내기 실패: {type(e).__name__}: {e}")
+    sys.exit(code)
 
 
 if __name__ == "__main__":

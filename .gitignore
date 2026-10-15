@@ -4,3 +4,4 @@ __pycache__/
 analyze_test.log
 bench/
 logs/
+tools/alert.local.json
