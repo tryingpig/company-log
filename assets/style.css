@@ -307,3 +307,21 @@ table.rel td .muted { font-size: 12px; }
 #relperf .tbl-wrap { overflow-x: auto; }
 .rel-note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 @media (max-width: 480px) { #rschart { height: 130px; } table.rel th, table.rel td { padding: 8px 6px; font-size: 13px; } .verdict { display: none; } }
+/* 따라다니는 이동 버튼 (목차 + 맨 위로) */
+h2.sec, #secChart { scroll-margin-top: 12px; }
+.fab { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 20;
+  opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s, transform .2s; }
+.fab.show { opacity: 1; transform: none; pointer-events: auto; }
+.fab-btn { font: inherit; font-size: 13px; font-weight: 600; min-width: 44px; height: 44px; padding: 0 14px; border-radius: 22px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .12); }
+#fabTop { font-size: 18px; padding: 0; }
+.fab-btn:hover { border-color: var(--text-2); }
+.fab-btn:focus-visible, .fab-menu a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fab-menu { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 6px; box-shadow: 0 4px 18px rgba(0, 0, 0, .14); min-width: 150px; }
+.fab-menu[hidden], .fab-menu a[hidden] { display: none; }
+.fab-menu a { padding: 8px 12px; border-radius: 8px; font-size: 14px; color: var(--text-2); }
+.fab-menu a:hover { background: var(--bg); color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .fab { transition: none; } }

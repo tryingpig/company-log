@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020f">
+<link rel="stylesheet" href="assets/style.css?v=20261020g">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -17,7 +17,7 @@
     <span class="px" id="px"></span><span class="chg" id="chg"></span>
   </div>
 
-  <div class="panel chart-box">
+  <div class="panel chart-box" id="secChart">
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
     <div class="rs-head" id="rsHead" hidden></div>
@@ -61,16 +61,16 @@
   <h2 class="sec" id="relHead" hidden>시장 대비 성과 <span class="sub" id="relSub"></span></h2>
   <div class="panel pad" id="relperf" hidden></div>
 
-  <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>
+  <h2 class="sec" id="secCons">통합 정리 <span class="sub" id="consSub"></span></h2>
   <div class="panel pad" id="consensus"></div>
 
-  <h2 class="sec">앞을 보는 숫자 <span class="sub">27E·28E 추정치 변화 · 목표가 근거 · 앞으로의 일정</span></h2>
+  <h2 class="sec" id="secFwd">앞을 보는 숫자 <span class="sub">27E·28E 추정치 변화 · 목표가 근거 · 앞으로의 일정</span></h2>
   <div class="panel pad" id="forward"></div>
 
-  <h2 class="sec">증권사별 의견 <span class="sub" id="brkSub"></span></h2>
+  <h2 class="sec" id="secBrk">증권사별 의견 <span class="sub" id="brkSub"></span></h2>
   <div class="panel" id="brokers"></div>
 
-  <h2 class="sec">증권사 리포트 로그 <span class="sub" id="repCount"></span>
+  <h2 class="sec" id="secLog">증권사 리포트 로그 <span class="sub" id="repCount"></span>
     <div class="seg" id="dirSeg">
       <button data-v="all" class="on">전체</button>
       <button data-v="up">상향</button>
@@ -680,6 +680,47 @@ Promise.all([
     renderHead(); drawChart(); renderRelPerf(); renderConsensus(); renderForward(); renderBrokers(); renderLog();
   })
   .catch(() => { document.getElementById('name').textContent = '종목을 찾을 수 없어요'; });
+</script>
+<nav class="fab" aria-label="페이지 이동">
+  <div class="fab-menu" id="fabMenu" hidden>
+    <a href="#secChart">차트</a>
+    <a href="#relHead" data-opt>시장 대비 성과</a>
+    <a href="#secCons">통합 정리</a>
+    <a href="#secFwd">앞을 보는 숫자</a>
+    <a href="#secBrk">증권사별 의견</a>
+    <a href="#secLog">리포트 로그</a>
+  </div>
+  <button type="button" class="fab-btn" id="fabToggle" aria-expanded="false" aria-controls="fabMenu" title="섹션으로 이동">목차</button>
+  <button type="button" class="fab-btn" id="fabTop" title="맨 위로" aria-label="맨 위로">↑</button>
+</nav>
+<script>
+// 따라다니는 이동 버튼: 목차(섹션 바로가기) + 맨 위로
+(() => {
+  const menu = document.getElementById('fabMenu'), tog = document.getElementById('fabToggle');
+  const smooth = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  const close = () => { menu.hidden = true; tog.setAttribute('aria-expanded', 'false'); };
+  tog.onclick = () => {
+    menu.querySelectorAll('a[data-opt]').forEach(a => {      // 데이터가 없어 숨긴 섹션은 목차에서도 뺀다
+      const t = document.querySelector(a.getAttribute('href'));
+      a.hidden = !t || t.hidden;
+    });
+    menu.hidden = !menu.hidden;
+    tog.setAttribute('aria-expanded', String(!menu.hidden));
+  };
+  menu.addEventListener('click', e => {
+    const a = e.target.closest('a');
+    if (!a) return;
+    e.preventDefault();
+    document.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior: smooth, block: 'start'});
+    close();
+  });
+  document.getElementById('fabTop').onclick = () => { window.scrollTo({top: 0, behavior: smooth}); close(); };
+  document.addEventListener('click', e => { if (!e.target.closest('.fab')) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  const fab = document.querySelector('.fab');
+  const onScroll = () => fab.classList.toggle('show', window.scrollY > 300);
+  addEventListener('scroll', onScroll, {passive: true}); onScroll();
+})();
 </script>
 </body>
 </html>
