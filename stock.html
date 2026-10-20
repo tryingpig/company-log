@@ -20,7 +20,16 @@
   <div class="panel chart-box">
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
-    <div class="chart-note">최근 6개월 일봉 · 점선 = 볼린저 밴드(20일 ±2σ, 범례에서 켜기/끄기) · 아래 막대 = 거래량, 가는 선 = 평소 거래량(직전 20일 평균), 진한 막대 = 평소의 2배 이상 · ▲ 목표가 상향 / ▼ 하향 리포트 · ⚠ 증권사 의견 전환 (마커를 누르면 해당 리포트로 이동)</div>
+    <dl class="chart-note">
+      <div><dt>기간</dt><dd>최근 6개월 일봉</dd></div>
+      <div><dt>선</dt><dd>5·10·20일 이동평균 · 점선 = 볼린저 밴드(20일 ±2σ)</dd></div>
+      <div><dt>마커</dt><dd><span class="pos">▲</span> 목표가 상향 · <span class="neg">▼</span> 하향 · ⚠ 증권사 의견 전환 — 누르면 해당 리포트로 이동</dd></div>
+      <div><dt>거래량</dt><dd>막대 = 거래량 · 가는 선 = 평소 거래량 · 진한 막대 = 평소의 2배 이상</dd></div>
+      <div class="vol-scale"><dt>평소 대비</dt><dd>
+        <span><b>적음</b> 0.7배 미만</span><span><b>보통</b> 0.7~1.5배</span><span><b>많음</b> 1.5배 이상</span><span><b>급증</b> 2배 이상</span><span class="muted">평소 = 그날을 뺀 직전 20거래일 평균</span>
+      </dd></div>
+      <div><dt>켜기·끄기</dt><dd>위 범례의 볼린저·거래량 버튼</dd></div>
+    </dl>
   </div>
 
   <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>

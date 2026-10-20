@@ -119,7 +119,14 @@ header.top .meta { color: var(--muted); font-size: 13px; }
 .legend .sw { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; border-radius: 1px; }
 .legend .date { color: var(--text); font-weight: 600; }
 #chart { height: 430px; }
-.chart-note { color: var(--muted); font-size: 12px; padding: 4px 4px 0; }
+.chart-note { color: var(--muted); font-size: 12px; margin: 8px 0 0; padding: 10px 4px 0; border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 24px; }
+.chart-note > div { display: flex; gap: 10px; line-height: 1.5; }
+.chart-note dt { flex: 0 0 4.5em; color: var(--text-2); font-weight: 600; }
+.chart-note dd { margin: 0; }
+.chart-note .vol-scale { grid-column: 1 / -1; }
+.chart-note .vol-scale dd { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.chart-note .vol-scale b { color: var(--text-2); font-weight: 600; margin-right: 3px; }
 
 h2.sec { font-size: 16px; margin: 28px 0 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 h2.sec .seg { margin-left: auto; }
