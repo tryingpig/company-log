@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020b">
+<link rel="stylesheet" href="assets/style.css?v=20261020d">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -20,16 +20,37 @@
   <div class="panel chart-box">
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
-    <dl class="chart-note">
-      <div><dt>기간</dt><dd>최근 6개월 일봉</dd></div>
-      <div><dt>선</dt><dd>5·10·20일 이동평균 · 점선 = 볼린저 밴드(20일 ±2σ)</dd></div>
-      <div><dt>마커</dt><dd><span class="pos">▲</span> 목표가 상향 · <span class="neg">▼</span> 하향 · ⚠ 증권사 의견 전환 — 누르면 해당 리포트로 이동</dd></div>
-      <div><dt>거래량</dt><dd>막대 = 거래량 · 가는 선 = 평소 거래량 · 진한 막대 = 평소의 2배 이상</dd></div>
-      <div class="vol-scale"><dt>평소 대비</dt><dd>
-        <span><b>적음</b> 0.7배 미만</span><span><b>보통</b> 0.7~1.5배</span><span><b>많음</b> 1.5배 이상</span><span><b>급증</b> 2배 이상</span><span class="muted">평소 = 그날을 뺀 직전 20거래일 평균</span>
-      </dd></div>
-      <div><dt>켜기·끄기</dt><dd>위 범례의 볼린저·거래량 버튼</dd></div>
-    </dl>
+    <div class="chart-key">
+      <div class="keyrow">
+        <span><span class="sw" style="background:var(--ma5)"></span>5일</span>
+        <span><span class="sw" style="background:var(--ma10)"></span>10일</span>
+        <span><span class="sw" style="background:var(--ma20)"></span>20일 이동평균</span>
+        <span><span class="sw dash"></span>볼린저</span>
+        <span class="sep" aria-hidden="true"></span>
+        <span><span class="mk pos">▲</span>목표가 상향</span>
+        <span><span class="mk neg">▼</span>하향</span>
+        <span><span class="mk warn">⚠&#xFE0E;</span>의견 전환</span>
+        <span class="sep" aria-hidden="true"></span>
+        <span><span class="vbar"></span>거래량</span>
+        <span><span class="vbar spike"></span>평소의 2배↑</span>
+        <span><span class="sw" style="background:var(--text-2)"></span>평소 거래량</span>
+      </div>
+      <div class="vs-scale">
+        <span class="vs-lab">평소 대비</span>
+        <div class="vs-seg" role="img" aria-label="적음 0.7배 미만, 보통 0.7~1.5배, 많음 1.5~2배, 급증 2배 이상">
+          <span>적음</span><span>보통</span><span>많음</span><span>급증</span>
+        </div>
+        <div class="vs-ticks" aria-hidden="true"><i>0.7배</i><i>1.5배</i><i>2배</i><i></i></div>
+      </div>
+      <details>
+        <summary>차트 보는 법</summary>
+        <ul>
+          <li>최근 6개월 일봉이에요. 볼린저 밴드는 20일 ±2σ예요.</li>
+          <li>평소 거래량 = 그날을 뺀 직전 20거래일 평균이에요. 장 마감 전 갱신분은 "장중 집계"로 표시돼요.</li>
+          <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
+        </ul>
+      </details>
+    </div>
   </div>
 
   <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>
