@@ -20,7 +20,7 @@
   <div class="panel chart-box">
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
-    <div class="chart-note">최근 6개월 일봉 · 점선 = 볼린저 밴드(20일 ±2σ, 범례에서 켜기/끄기) · ▲ 목표가 상향 / ▼ 하향 리포트 · ⚠ 증권사 의견 전환 (마커를 누르면 해당 리포트로 이동)</div>
+    <div class="chart-note">최근 6개월 일봉 · 점선 = 볼린저 밴드(20일 ±2σ, 범례에서 켜기/끄기) · 아래 막대 = 거래량, 가는 선 = 평소 거래량(직전 20일 평균), 진한 막대 = 평소의 2배 이상 · ▲ 목표가 상향 / ▼ 하향 리포트 · ⚠ 증권사 의견 전환 (마커를 누르면 해당 리포트로 이동)</div>
   </div>
 
   <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>
@@ -49,8 +49,11 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const code = new URLSearchParams(location.search).get('code');
 const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20']];
 let data, analysis = null, chart, candle, maSeries = [], bbSeries = [], dir = 'all';
-let bbOn = false;
+let bbOn = false, volOn = true, volSeries = null, volAvgSeries = null;
 try { bbOn = localStorage.getItem('cl-bb') === '1'; } catch (e) {}
+try { volOn = localStorage.getItem('cl-vol') !== '0'; } catch (e) {}
+const VOL_N = 20;            // 평소 거래량 = 직전 20거래일 평균(당일 제외)
+const VOL_HI = 1.5, VOL_LO = 0.7, VOL_SPIKE = 2;
 
 function sma(bars, n) {
   const out = [];
@@ -74,6 +77,51 @@ function bollinger(bars, n = 20, k = 2) {
     lo.push({time: bars[i].d, value: Math.round(m - k * sd)});
   }
   return [up, lo];
+}
+
+// 거래량 기준선: 그날을 뺀 직전 20거래일 평균. 당일이 튀어도 기준이 같이 끌려 올라가지 않는다
+function volAvg(bars, n = VOL_N) {
+  const out = {};
+  let sum = 0;
+  bars.forEach((b, i) => {
+    if (i >= n) out[b.d] = sum / n;
+    sum += b.v || 0;
+    if (i >= n) sum -= bars[i - n].v || 0;
+  });
+  return out;
+}
+
+function fmtVol(v) {
+  if (v == null) return '-';
+  if (v >= 1e8) return (v / 1e8).toFixed(v >= 1e9 ? 0 : 1) + '억주';
+  if (v >= 1e4) return Math.round(v / 1e4).toLocaleString('ko-KR') + '만주';
+  return v.toLocaleString('ko-KR') + '주';
+}
+
+function volWord(r) {
+  if (r == null) return '';
+  if (r >= VOL_SPIKE) return '급증';
+  if (r >= VOL_HI) return '많음';
+  if (r < VOL_LO) return '적음';
+  return '보통';
+}
+
+// 마지막 일봉이 장 마감(15:30) 전에 갱신된 값이면 거래량이 아직 덜 쌓인 것
+function isIntraday(d) {
+  const u = data.updated || '';
+  return d === data.prices[data.prices.length - 1].d && u.slice(0, 10) === d && u.slice(11, 16) < '15:30';
+}
+
+function alpha(hex, a) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+}
+
+function applyVolLayout() {
+  candle.priceScale().applyOptions({scaleMargins: volOn ? {top: 0.06, bottom: 0.26} : {top: 0.06, bottom: 0.08}});
+  volSeries.applyOptions({visible: volOn});
+  volAvgSeries.applyOptions({visible: volOn});
 }
 
 function sixMonthsBefore(iso) {
@@ -120,6 +168,22 @@ function drawChart() {
     s.setData(arr.filter(p => p.time >= from));
     return s;
   });
+
+  // 거래량: 아래 20% 전용 눈금. 평소(직전 20일 평균)의 2배 이상인 날은 진하게
+  const avg = volAvg(bars);
+  volSeries = chart.addHistogramSeries({priceScaleId: 'vol', priceFormat: {type: 'volume'},
+                                        priceLineVisible: false, lastValueVisible: false});
+  chart.priceScale('vol').applyOptions({scaleMargins: {top: 0.8, bottom: 0}, visible: false});
+  const upC = css('--up'), dnC = css('--down');
+  volSeries.setData(vis.map(b => {
+    const r = avg[b.d] ? b.v / avg[b.d] : null;
+    return {time: b.d, value: b.v || 0,
+            color: alpha(b.c >= b.o ? upC : dnC, r != null && r >= VOL_SPIKE ? 0.85 : 0.35)};
+  }));
+  volAvgSeries = chart.addLineSeries({priceScaleId: 'vol', color: css('--text-2'), lineWidth: 1,
+                                      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false});
+  volAvgSeries.setData(vis.filter(b => avg[b.d]).map(b => ({time: b.d, value: Math.round(avg[b.d])})));
+  applyVolLayout();
 
   // 리포트 마커: 장 없는 날(주말·휴일)에 나온 리포트는 다음 거래일에 표시
   const days = vis.map(b => b.d);
@@ -170,14 +234,27 @@ function updateLegend(p) {
     bb = bollinger(bars).map(a => a[a.length - 1]?.value);
   }
   if (!bar) return;
+  const vb = bars.find(b => b.d === bar.d);
+  const va = vb && volAvg(bars)[vb.d];
+  const vr = vb && va ? vb.v / va : null;
+  const live = vb && isIntraday(vb.d);
+  const volTxt = !volOn ? '끔'
+    : `${fmtVol(vb?.v)}${vr != null ? ` · 평소의 ${vr.toFixed(1)}배 <b class="vol-${volWord(vr) === '급증' || volWord(vr) === '많음' ? 'hi' : volWord(vr) === '적음' ? 'lo' : 'mid'}">${volWord(vr)}</b>` : ''}${live ? ' <span class="muted">(장중 집계)</span>' : ''}`;
   document.getElementById('legend').innerHTML =
     `<span class="date">${bar.d}</span><span>종가 ${fmt(bar.c)}</span>` +
     MAS.map(([n, v], i) => `<span><span class="sw" style="background:var(${v})"></span>${n}일 ${fmt(mas[i])}</span>`).join('') +
-    `<button type="button" class="bb-tog${bbOn ? ' on' : ''}" id="bbTog" aria-pressed="${bbOn}"><span class="sw dash"></span>볼린저 ${bbOn ? `${fmt(bb[0])} / ${fmt(bb[1])}` : '끔'}</button>`;
+    `<button type="button" class="bb-tog${bbOn ? ' on' : ''}" id="bbTog" aria-pressed="${bbOn}"><span class="sw dash"></span>볼린저 ${bbOn ? `${fmt(bb[0])} / ${fmt(bb[1])}` : '끔'}</button>` +
+    `<button type="button" class="bb-tog vol-tog${volOn ? ' on' : ''}" id="volTog" aria-pressed="${volOn}" title="평소 = 그날을 뺀 직전 20거래일 평균 거래량. 1.5배 이상 많음 · 2배 이상 급증 · 0.7배 미만 적음"><span class="sw bar"></span>거래량 ${volTxt}</button>`;
   document.getElementById('bbTog').onclick = () => {
     bbOn = !bbOn;
     try { localStorage.setItem('cl-bb', bbOn ? '1' : '0'); } catch (e) {}
     bbSeries.forEach(s => s.applyOptions({visible: bbOn}));
+    updateLegend(null);
+  };
+  document.getElementById('volTog').onclick = () => {
+    volOn = !volOn;
+    try { localStorage.setItem('cl-vol', volOn ? '1' : '0'); } catch (e) {}
+    applyVolLayout();
     updateLegend(null);
   };
 }
