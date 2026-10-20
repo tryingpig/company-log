@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020e">
+<link rel="stylesheet" href="assets/style.css?v=20261020f">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -20,6 +20,8 @@
   <div class="panel chart-box">
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
+    <div class="rs-head" id="rsHead" hidden></div>
+    <div id="rschart" hidden></div>
     <div class="chart-key">
       <div class="keyrow">
         <span><span class="sw" style="background:var(--ma5)"></span>5일</span>
@@ -34,6 +36,8 @@
         <span><span class="vbar"></span>거래량</span>
         <span><span class="vbar spike"></span>평소의 2배↑</span>
         <span><span class="sw" style="background:var(--text-2)"></span>평소 거래량</span>
+        <span class="sep rs-only" aria-hidden="true" hidden></span>
+        <span class="rs-only" hidden><span class="sw rs-sw"></span>상대강도 (100 위 = 6개월 동안 시장보다 강함)</span>
       </div>
       <div class="vs-scale">
         <span class="vs-lab">평소 대비</span>
@@ -47,11 +51,15 @@
         <ul>
           <li>최근 6개월 일봉이에요. 볼린저 밴드는 20일 ±2σ예요.</li>
           <li>평소 거래량 = 그날을 뺀 직전 20거래일 평균이에요. 장 마감 전 갱신분은 "장중 집계"로 표시돼요.</li>
+          <li>상대강도 = 종목 주가 ÷ 시장 지수(코스피 종목은 코스피, 코스닥 종목은 코스닥)를 차트 첫날 = 100으로 맞춘 값이에요. 선이 오르면 그동안 시장보다 강한 거예요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
       </details>
     </div>
   </div>
+
+  <h2 class="sec" id="relHead" hidden>시장 대비 성과 <span class="sub" id="relSub"></span></h2>
+  <div class="panel pad" id="relperf" hidden></div>
 
   <h2 class="sec">통합 정리 <span class="sub" id="consSub"></span></h2>
   <div class="panel pad" id="consensus"></div>
@@ -80,6 +88,9 @@ const code = new URLSearchParams(location.search).get('code');
 const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20']];
 let data, analysis = null, chart, candle, maSeries = [], bbSeries = [], dir = 'all';
 let bbOn = false, volOn = true, volSeries = null, volAvgSeries = null;
+let market = null, rchart = null, rsSeries = null, rsMap = {}, idxMap = {};
+const MKT_NAME = {KOSPI: '코스피', KOSDAQ: '코스닥'};
+const REL_PERIODS = [['1주', 5], ['1개월', 21], ['3개월', 63], ['6개월', null]];
 try { bbOn = localStorage.getItem('cl-bb') === '1'; } catch (e) {}
 try { volOn = localStorage.getItem('cl-vol') !== '0'; } catch (e) {}
 const VOL_N = 20;            // 평소 거래량 = 직전 20거래일 평균(당일 제외)
@@ -167,6 +178,9 @@ function drawChart() {
   if (!bars.length) { el.innerHTML = '<div class="empty">주가 데이터가 없어요</div>'; return; }
   const from = sixMonthsBefore(bars[bars.length - 1].d);
   const vis = bars.filter(b => b.d >= from);
+  const rsVis = vis.filter(b => idxMap[b.d]);          // 지수와 날짜가 맞는 일봉만
+  const hasRS = rsVis.length > 20;
+  if (rchart) { rchart.remove(); rchart = null; }
 
   chart = LightweightCharts.createChart(el, {
     autoSize: true,
@@ -242,18 +256,103 @@ function drawChart() {
   markers.sort((a, b) => a.time < b.time ? -1 : 1);
   candle.setMarkers(markers);
   chart.timeScale().fitContent();
+  if (hasRS) drawRS(rsVis);
 
-  chart.subscribeCrosshairMove(p => updateLegend(p.time ? p : null));
+  chart.subscribeCrosshairMove(p => {
+    updateLegend(p.time ? p : null);
+    if (!rchart) return;
+    if (p.time && rsMap[p.time] != null) rchart.setCrosshairPosition(rsMap[p.time], p.time, rsSeries);
+    else rchart.clearCrosshairPosition();
+  });
   chart.subscribeClick(p => {
     if (p.hoveredObjectId) focusCard(p.hoveredObjectId);
   });
   updateLegend(null);
 }
 
+// 상대강도: 종목 ÷ 지수, 차트 첫날 = 100. 가격 눈금과 섞이지 않게 아래 칸에 따로 그린다
+function drawRS(rows) {
+  const box = document.getElementById('rschart');
+  box.hidden = false;
+  document.getElementById('rsHead').hidden = false;
+  document.querySelectorAll('.rs-only').forEach(e => e.hidden = false);
+  const mk = MKT_NAME[data.market];
+  document.getElementById('rsHead').innerHTML = `<b>상대강도</b> ${esc(data.name)} ÷ ${mk} · ${rows[0].d.slice(5)} = 100 · 선이 오르면 시장보다 강함`;
+  const up = css('--up'), dn = css('--down');
+  rchart = LightweightCharts.createChart(box, {
+    autoSize: true,
+    layout: {background: {color: 'transparent'}, textColor: css('--text-2'), fontSize: 12},
+    grid: {vertLines: {visible: false}, horzLines: {color: css('--line')}},
+    rightPriceScale: {borderVisible: false, scaleMargins: {top: 0.12, bottom: 0.08}},
+    timeScale: {borderVisible: false, fixLeftEdge: true, fixRightEdge: true},
+    crosshair: {mode: LightweightCharts.CrosshairMode.Normal},
+    localization: {priceFormatter: v => v.toFixed(0)},
+  });
+  rsSeries = rchart.addBaselineSeries({
+    baseValue: {type: 'price', price: 100}, lineWidth: 2, priceLineVisible: false,
+    topLineColor: up, topFillColor1: alpha(up, 0.18), topFillColor2: alpha(up, 0.02),
+    bottomLineColor: dn, bottomFillColor1: alpha(dn, 0.02), bottomFillColor2: alpha(dn, 0.18),
+    priceFormat: {type: 'custom', formatter: v => v.toFixed(1)},
+  });
+  const base = rows[0].c / idxMap[rows[0].d];
+  rsMap = {};
+  const pts = rows.map(b => { const v = b.c / idxMap[b.d] / base * 100; rsMap[b.d] = v; return {time: b.d, value: v}; });
+  rsSeries.setData(pts);
+  rsSeries.createPriceLine({price: 100, color: css('--muted'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false});
+  // 날짜축은 아래 칸에만 두고 두 차트의 범위·십자선을 맞춘다
+  chart.applyOptions({timeScale: {visible: false}});
+  rchart.timeScale().fitContent();
+  chart.timeScale().fitContent();
+  let syncing = false;
+  const link = (a, b) => a.timeScale().subscribeVisibleLogicalRangeChange(r => {
+    if (syncing || !r) return;
+    syncing = true; b.timeScale().setVisibleLogicalRange(r); syncing = false;
+  });
+  link(chart, rchart); link(rchart, chart);
+  rchart.subscribeCrosshairMove(p => {
+    const b = p.time && data.prices.find(x => x.d === p.time);
+    if (b) { chart.setCrosshairPosition(b.c, p.time, candle); updateLegend({time: p.time, fromRS: true}); }
+    else { chart.clearCrosshairPosition(); updateLegend(null); }
+  });
+}
+
+// 시장 대비 성과 표: 기간별 종목 수익률 − 지수 수익률(%p)
+function renderRelPerf() {
+  const mk = MKT_NAME[data.market];
+  const rows = data.prices.filter(b => idxMap[b.d]);
+  if (!mk || rows.length < 25) return;
+  const from = sixMonthsBefore(rows[rows.length - 1].d);
+  const last = rows.length - 1;
+  const first6 = rows.findIndex(b => b.d >= from);
+  const pct = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  const body = REL_PERIODS.map(([lab, n]) => {
+    const i0 = n == null ? first6 : last - n;
+    if (i0 < 0) return '';
+    const a = (rows[last].c / rows[i0].c - 1) * 100;
+    const b = (idxMap[rows[last].d] / idxMap[rows[i0].d] - 1) * 100;
+    const d = a - b;
+    return `<tr><td>${lab} <span class="muted">${rows[i0].d.slice(5)}~</span></td>
+      <td class="${pctCls(a)}">${pct(a)}</td><td class="${pctCls(b)}">${pct(b)}</td>
+      <td><b class="${pctCls(d)}">${(d >= 0 ? '+' : '') + d.toFixed(1)}%p</b><span class="verdict ${d >= 0 ? 'out' : 'under'}">${d >= 0 ? '아웃퍼폼' : '언더퍼폼'}</span></td></tr>`;
+  }).join('');
+  document.getElementById('relHead').hidden = false;
+  const box = document.getElementById('relperf');
+  box.hidden = false;
+  document.getElementById('relSub').textContent = `${mk} 대비 · ${rows[last].d} 종가 기준${isIntraday(rows[last].d) ? ' (장중)' : ''}`;
+  box.innerHTML = `<div class="tbl-wrap"><table class="rel">
+      <thead><tr><th>기간</th><th>${esc(data.name)}</th><th>${mk}</th><th>차이</th></tr></thead><tbody>${body}</tbody></table></div>
+    <p class="rel-note">차이 = 종목 수익률 − 지수 수익률. 플러스면 그 기간 시장보다 잘 오른 것(아웃퍼폼), 마이너스면 덜 오른 것(언더퍼폼) · 1주 5거래일 · 1개월 21거래일 · 3개월 63거래일 · 6개월 = 차트 첫날부터</p>`;
+}
+
 function updateLegend(p) {
   const bars = data.prices;
   let bar, mas, bb;
-  if (p) {
+  if (p && p.fromRS) {
+    const i = bars.findIndex(b => b.d === p.time);
+    bar = bars[i];
+    mas = MAS.map(([n]) => sma(bars.slice(0, i + 1), n).pop()?.value);
+    bb = bollinger(bars.slice(0, i + 1)).map(a => a[a.length - 1]?.value);
+  } else if (p) {
     const c = p.seriesData.get(candle);
     bar = c && {d: p.time, o: c.open, h: c.high, l: c.low, c: c.close};
     mas = maSeries.map(s => p.seriesData.get(s)?.value);
@@ -274,7 +373,9 @@ function updateLegend(p) {
     `<span class="date">${bar.d}</span><span>종가 ${fmt(bar.c)}</span>` +
     MAS.map(([n, v], i) => `<span><span class="sw" style="background:var(${v})"></span>${n}일 ${fmt(mas[i])}</span>`).join('') +
     `<button type="button" class="bb-tog${bbOn ? ' on' : ''}" id="bbTog" aria-pressed="${bbOn}"><span class="sw dash"></span>볼린저 ${bbOn ? `${fmt(bb[0])} / ${fmt(bb[1])}` : '끔'}</button>` +
-    `<button type="button" class="bb-tog vol-tog${volOn ? ' on' : ''}" id="volTog" aria-pressed="${volOn}" title="평소 = 그날을 뺀 직전 20거래일 평균 거래량. 1.5배 이상 많음 · 2배 이상 급증 · 0.7배 미만 적음"><span class="sw bar"></span>거래량 ${volTxt}</button>`;
+    `<button type="button" class="bb-tog vol-tog${volOn ? ' on' : ''}" id="volTog" aria-pressed="${volOn}" title="평소 = 그날을 뺀 직전 20거래일 평균 거래량. 1.5배 이상 많음 · 2배 이상 급증 · 0.7배 미만 적음"><span class="sw bar"></span>거래량 ${volTxt}</button>` +
+    (idxMap[bar.d] ? `<span>${MKT_NAME[data.market]} ${idxMap[bar.d].toLocaleString('ko-KR', {maximumFractionDigits: 2})}</span>` : '') +
+    (rsMap[bar.d] != null ? `<span><span class="sw rs-sw"></span>상대강도 <b class="${rsMap[bar.d] >= 100 ? 'pos' : 'neg'}">${rsMap[bar.d].toFixed(1)}</b></span>` : '');
   document.getElementById('bbTog').onclick = () => {
     bbOn = !bbOn;
     try { localStorage.setItem('cl-bb', bbOn ? '1' : '0'); } catch (e) {}
@@ -570,10 +671,13 @@ if (!code) location.replace('./');
 Promise.all([
   fetch(`data/stocks/${code}.json`, {cache: 'no-cache'}).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
   fetch(`data/analysis/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch('data/market.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
 ])
-  .then(([d, a]) => {
-    data = d; analysis = a;
-    renderHead(); drawChart(); renderConsensus(); renderForward(); renderBrokers(); renderLog();
+  .then(([d, a, m]) => {
+    data = d; analysis = a; market = m;
+    idxMap = {};
+    (m && d.market && m[d.market] || []).forEach(x => { idxMap[x.d] = x.c; });
+    renderHead(); drawChart(); renderRelPerf(); renderConsensus(); renderForward(); renderBrokers(); renderLog();
   })
   .catch(() => { document.getElementById('name').textContent = '종목을 찾을 수 없어요'; });
 </script>

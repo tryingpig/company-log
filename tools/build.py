@@ -140,6 +140,29 @@ def current_name(code):
 
 # ── 일봉 ────────────────────────────────────────────────────────────────────
 
+MARKETS = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
+
+
+def fetch_index(sym):
+    """시장 지수 일봉 종가(소수점 유지). 실패하면 None."""
+    for attempt in range(3):
+        try:
+            r = requests.get("https://fchart.stock.naver.com/sise.nhn",
+                             params={"symbol": sym, "timeframe": "day", "count": str(BARS), "requestType": "0"},
+                             headers=UA, timeout=10)
+            r.raise_for_status()
+            rows = []
+            for s in re.findall(r'data="([^"]+)"', r.text):
+                p = s.split("|")
+                if len(p) == 6 and p[0].isdigit() and float(p[4]) > 0:
+                    rows.append({"d": f"{p[0][:4]}-{p[0][4:6]}-{p[0][6:]}", "c": round(float(p[4]), 2)})
+            if rows:
+                return rows
+        except Exception:
+            time.sleep(0.5 * (attempt + 1))
+    return None
+
+
 def fetch_bars(code):
     for attempt in range(3):
         try:
@@ -267,6 +290,17 @@ def main():
                 prices[code] = bars
         print(f"일봉 수집 실패 {sum(1 for b in prices.values() if not b)}개")
 
+    # 시장 대비 성과용 지수(코스피·코스닥). 하나라도 실패하면 기존 파일 유지
+    mpath = DATA / "market.json"
+    if not no_price:
+        got = {m: fetch_index(m) for m in MARKETS}
+        if all(got.values()):
+            mpath.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), **got},
+                                        separators=(",", ":")), encoding="utf-8")
+        else:
+            print(f"지수 수집 실패: {[m for m, v in got.items() if not v]} (기존 market.json 유지)")
+    uni = json.loads(UNIVERSE.read_text(encoding="utf-8")) if UNIVERSE.exists() else {}
+
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     index = []
     for code, v in by_code.items():
@@ -281,7 +315,8 @@ def main():
             r.pop("name", None)
         close = bars[-1]["c"] if bars else None
         brokers, consensus = summarize_brokers(reps, close)
-        path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now,
+        market = (uni.get(code) or {}).get("market") or old.get("market")
+        path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now, "market": market,
                                     "close": close, "close_date": bars[-1]["d"] if bars else None,
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
