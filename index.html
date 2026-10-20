@@ -257,8 +257,9 @@ addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 showTab(location.hash.slice(1));
 
 // 강도·거래량 신호 탭
-let sigs = [], sigFirst = false, sigShown = 30;
-const SIG_FIRST = 30;
+// 최근 5거래일은 처음부터 전부 보여준다(사용자 요청 10-21) — 더 보기·접기는 쓰지 않음
+let sigs = [], sigFirst = false, sigShown = Infinity;
+const SIG_FIRST = Infinity;
 function sigSpark(rs) {
   if (!rs) return '';
   const w = 72, h = 22, p = 2, lo = Math.min(100, ...rs), hi = Math.max(100, ...rs);
@@ -290,7 +291,7 @@ document.getElementById('sigFirst').onclick = e => { sigFirst = !sigFirst; e.cur
 document.getElementById('sigMore').onclick = () => { sigShown += 30; renderSig(); };
 document.getElementById('sigLess').onclick = () => { sigShown = SIG_FIRST; renderSig(); document.getElementById('pane-signals').scrollIntoView({block: 'start'}); };
 // 매도 우위 대량 거래
-let sells = [], sellTrend = false, sellShown = 30;
+let sells = [], sellTrend = false, sellShown = Infinity;
 function renderSell() {
   const rows = sells.filter(f => !sellTrend || f.trend);
   document.getElementById('sellSub').textContent = `최근 5거래일 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
