@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261021b">
+<link rel="stylesheet" href="assets/style.css?v=20261021c">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -49,6 +49,7 @@
         <span><span class="sw" style="background:var(--text-2)"></span>평소 거래량</span>
         <span class="sep" aria-hidden="true"></span>
         <span><span class="mk sigk">●</span>강도·거래량 신호 (양봉만 · ★ 첫 신호)</span>
+        <span><span class="mk sellk">■</span>매도 우위 대량 거래 (음봉 + 거래량 2배↑)</span>
         <span class="sep rs-only" aria-hidden="true" hidden></span>
         <span class="rs-only" hidden><span class="sw rs-sw"></span>상대강도 (100 위 = 6개월 동안 시장보다 강함)</span>
       </div>
@@ -66,6 +67,7 @@
           <li>평소 거래량 = 그날을 뺀 직전 20거래일 평균이에요. 장 마감 전 갱신분은 "장중 집계"로 표시돼요.</li>
           <li>상대강도 = 종목 주가 ÷ 시장 지수(코스피 종목은 코스피, 코스닥 종목은 코스닥)를 차트 첫날 = 100으로 맞춘 값이에요. 선이 오르면 그동안 시장보다 강한 거예요.</li>
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
+          <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
       </details>
@@ -271,6 +273,10 @@ function drawChart() {
   (data.signals || []).filter(s => s.d >= from).forEach(s => markers.push({
     time: s.d, position: 'belowBar', shape: 'circle', color: css('--sig'),
     text: (s.nth === 1 ? '★' : '') + s.volx.toFixed(1) + '배',
+  }));
+  // 매도 우위 대량 거래(음봉 + 거래량 2배↑): 캔들 위 네모
+  (data.sells || []).filter(s => s.d >= from).forEach(s => markers.push({
+    time: s.d, position: 'aboveBar', shape: 'square', color: css('--sell'), text: s.volx.toFixed(1) + '배',
   }));
   markers.sort((a, b) => a.time < b.time ? -1 : 1);
   candle.setMarkers(markers);

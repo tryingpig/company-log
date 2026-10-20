@@ -327,7 +327,22 @@ def main():
                             "chg": round((rows[i]["c"] / rows[i - 1]["c"] - 1) * 100, 1)})
         return out
 
+    def sell_signals(bars):
+        """매도 우위 대량 거래(사용자 정의, 2026-10-21): 음봉(종가 < 시가) + 거래량 평소(직전 20거래일 평균)의 2배 이상.
+        trend = 전일 종가가 20일선 위였는지(상승 추세 중에 나온 매도 우위인지)."""
+        out = []
+        for i in range(21, len(bars)):
+            b = bars[i]
+            va = sum(x["v"] for x in bars[i - 20:i]) / 20
+            if va and b["c"] < b["o"] and b["v"] / va >= 2:
+                ma_prev = sum(x["c"] for x in bars[i - 20:i]) / 20
+                out.append({"d": b["d"], "volx": round(b["v"] / va, 1),
+                            "chg": round((b["c"] / bars[i - 1]["c"] - 1) * 100, 1),
+                            "trend": bars[i - 1]["c"] > ma_prev})
+        return out
+
     tdays = sorted(set(mclose.get("KOSPI", {})))[-SIG_TDAYS:]
+    sellfeed = []
     sig_cut = tdays[0] if tdays else "9999"
     sigfeed = []
 
@@ -368,11 +383,15 @@ def main():
         brokers, consensus = summarize_brokers(reps, close)
         market = (uni.get(code) or {}).get("market") or old.get("market")
         sigs = strength_signals(bars, market) if market else []
+        sells = sell_signals(bars)
+        for s_ in sells:
+            if s_["d"] >= sig_cut:
+                sellfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
         for s_ in sigs:
             if s_["d"] >= sig_cut:
                 sigfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
         path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now, "market": market,
-                                    "signals": sigs,
+                                    "signals": sigs, "sells": sells,
                                     "close": close, "close_date": bars[-1]["d"] if bars else None,
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
@@ -401,6 +420,8 @@ def main():
                       "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
                       **relperf(bars, market),
                       "flip2w": {"up": len(rb["up"]), "down": len(rb["down"]), "last": rlast} if rlast else None,
+                      "sell5": next(({"d": s_["d"], "volx": s_["volx"], "trend": s_["trend"]} for s_ in reversed(sells)
+                                     if s_["d"] >= sig_cut), None),
                       "sig5": next(({"d": s_["d"], "nth": s_["nth"], "volx": s_["volx"]} for s_ in reversed(sigs)
                                     if s_["d"] >= sig_cut), None)})
     index.sort(key=lambda x: x["last_date"], reverse=True)
@@ -410,7 +431,12 @@ def main():
         f_.update(rel3=e.get("rel3"), rs=e.get("rs"))
         f_.pop("d", None)
     sigfeed.sort(key=lambda f: (f["date"], f["volx"]), reverse=True)
-    (DATA / "signals.json").write_text(json.dumps({"updated": now, "tdays": tdays, "signals": sigfeed},
+    for f_ in sellfeed:
+        e = next((x for x in index if x["code"] == f_["code"]), {})
+        f_.update(rel3=e.get("rel3"), rs=e.get("rs"))
+        f_.pop("d", None)
+    sellfeed.sort(key=lambda f: (f["date"], f["volx"]), reverse=True)
+    (DATA / "signals.json").write_text(json.dumps({"updated": now, "tdays": tdays, "signals": sigfeed, "sells": sellfeed},
                                                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (DATA / "flips.json").write_text(json.dumps({"updated": now, "days": FEED_DAYS, "flips": feed},
                                                 ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
