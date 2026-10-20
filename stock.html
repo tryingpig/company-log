@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020i">
+<link rel="stylesheet" href="assets/style.css?v=20261020j">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -677,7 +677,10 @@ Promise.all([
     data = d; analysis = a; market = m;
     idxMap = {};
     (m && d.market && m[d.market] || []).forEach(x => { idxMap[x.d] = x.c; });
-    renderHead(); drawChart(); renderRelPerf(); renderConsensus(); renderForward(); renderBrokers(); renderLog();
+    renderHead(); drawChart(); renderRelPerf(); renderConsensus();
+    renderForward(); renderBrokers(); renderLog();
+    // 목록의 '최근 의견 전환'에서 들어오면 그 리포트로 이동
+    setTimeout(() => { const m = location.hash.match(/^#r(\d+)$/); if (m) focusCard(m[1]); }, 0);
   })
   .catch(() => { document.getElementById('name').textContent = '종목을 찾을 수 없어요'; });
 </script>

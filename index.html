@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020i">
+<link rel="stylesheet" href="assets/style.css?v=20261020j">
 </head>
 <body>
 <div class="wrap">
@@ -34,6 +34,11 @@
       <button type="button" class="chip" data-f="week" aria-pressed="false">이번 주 리포트</button>
     </div>
   </div>
+
+  <section class="feed" id="feedBox" hidden aria-labelledby="feedHead">
+    <h2 class="feed-h" id="feedHead">최근 의견 전환 <span class="sub" id="feedSub"></span></h2>
+    <div class="panel"><ol class="feed-list" id="feed"></ol><button type="button" class="feed-more" id="feedMore" hidden>더 보기</button></div>
+  </section>
 
   <p class="count" id="count"></p>
   <div id="groups"></div>
@@ -152,6 +157,37 @@ document.getElementById('more').onclick = () => { shown += PAGE; render(); };
   const onScroll = () => fab.classList.toggle('show', window.scrollY > 300);
   addEventListener('scroll', onScroll, {passive: true}); onScroll();
 })();
+
+// 최근 의견 전환: 같은 증권사가 직전 리포트와 반대 방향(상향↔하향)으로 낸 리포트, 최신순
+const DIRK = {up: '상향', down: '하향'};
+let flips = [], feedShown = 12;
+function renderFeed() {
+  const box = document.getElementById('feedBox');
+  if (!flips.length) { box.hidden = true; return; }
+  box.hidden = false;
+  document.getElementById('feedSub').textContent =
+    `최근 2주 · ${flips.length}건 · ${new Set(flips.map(f => f.code)).size}종목 · 최신순`;
+  let html = '', day = '';
+  flips.slice(0, feedShown).forEach(f => {
+    const d = f.date.slice(0, 10);
+    if (d !== day) {
+      day = d;
+      html += `<li class="feed-day">${d.slice(5).replace('-', '.')} (${WD[new Date(d + 'T00:00:00').getDay()]})</li>`;
+    }
+    html += `<li><a href="stock.html?code=${f.code}#r${f.id}">
+      <span class="fd">${f.date.slice(11)}</span><span class="fn">${esc(f.name)}</span><span class="fb">${esc(f.broker)}</span>
+      <span class="fx"><span class="${f.prev_dir === 'up' ? 'pos' : 'neg'}">${DIRK[f.prev_dir]}</span><span class="arrow">→</span><b class="${f.dir === 'up' ? 'pos' : 'neg'}">${DIRK[f.dir]}</b>
+      <span class="ft">· ${f.from ? fmt(f.from) + '→' : ''}${fmt(f.to)}</span></span></a></li>`;
+  });
+  document.getElementById('feed').innerHTML = html;
+  const m = document.getElementById('feedMore');
+  m.hidden = flips.length <= feedShown;
+  m.textContent = `더 보기 (${flips.length - feedShown}건 남음)`;
+}
+document.getElementById('feedMore').onclick = () => { feedShown += 20; renderFeed(); };
+fetch('data/flips.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
+  flips = d?.flips || []; renderFeed();
+}).catch(() => {});
 
 fetch('data/index.json', {cache: 'no-cache'}).then(r => r.json()).then(d => {
   stocks = d.stocks;

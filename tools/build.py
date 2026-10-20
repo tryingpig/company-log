@@ -189,6 +189,7 @@ def fetch_bars(code):
 # ── 증권사별 집계 (코드 계산 — 로그에 적힌 목표가만 쓴다) ──────────────────────
 
 WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
+FEED_DAYS = 14       # 목록 맨 위 '최근 의견 전환' 칸에 보여줄 기간
 FLIP_DAYS = 183      # 전환(같은 증권사 상향↔하향)은 직전 리포트를 6개월까지 거슬러 찾는다 (2026-10-20 사용자 결정)
 
 
@@ -314,6 +315,8 @@ def main():
 
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     index = []
+    feed = []                                                # 목록 맨 위 '최근 의견 전환' (최근 FEED_DAYS일)
+    feed_cut = (datetime.now(KST) - timedelta(days=FEED_DAYS)).strftime("%Y-%m-%d")
     for code, v in by_code.items():
         path = STOCKS / f"{code}.json"
         old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -332,6 +335,10 @@ def main():
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
                                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        for r in reps:
+            if r.get("flip") and r["date"][:10] >= feed_cut:
+                feed.append({"date": r["date"][:16], "code": code, "name": v["name"], "broker": r["broker"],
+                             "prev_dir": r["prev_dir"], "dir": r["dir"], "from": r["from"], "to": r["to"], "id": r["id"]})
         last = reps[0]
         index.append({"code": code, "name": v["name"], "count": len(reps),
                       "up": sum(r["dir"] == "up" for r in reps),
@@ -348,6 +355,9 @@ def main():
                       "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
                       "rel3": rel3(bars, market)})
     index.sort(key=lambda x: x["last_date"], reverse=True)
+    feed.sort(key=lambda f: (f["date"], f["id"]), reverse=True)
+    (DATA / "flips.json").write_text(json.dumps({"updated": now, "days": FEED_DAYS, "flips": feed},
+                                                ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (DATA / "index.json").write_text(json.dumps({"updated": now, "stocks": index},
                                                 ensure_ascii=False, separators=(",", ":")),
                                      encoding="utf-8")

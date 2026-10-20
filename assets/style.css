@@ -347,3 +347,28 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
 .list a:hover .nums .sorted { background: var(--surface); }
 .more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text-2); cursor: pointer; }
 .list .nums b.pos { color: var(--up); } .list .nums b.neg { color: var(--down); }
+/* 목록 맨 위 '최근 의견 전환' */
+.feed { margin: 14px 0 4px; }
+.feed-h { font-size: 15px; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.feed-h .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+.feed-list { list-style: none; margin: 0; padding: 0; }
+.feed-list li + li { border-top: 1px solid var(--line); }
+.feed-list .feed-day { background: var(--bg); color: var(--text-2); font-size: 12px; font-weight: 600; padding: 4px 16px; }
+.feed-list .feed-day:first-child { border-radius: 12px 12px 0 0; }
+.feed-list a { display: grid; grid-template-columns: 4.2em minmax(7em, 1.2fr) minmax(6em, 1fr) auto; gap: 2px 12px; align-items: center;
+  padding: 9px 16px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.feed-list a:hover { background: var(--bg); }
+.feed-list .fd { color: var(--muted); font-size: 13px; }
+.feed-list .fn { font-weight: 700; }
+.feed-list .fb { color: var(--text-2); font-size: 13px; }
+.feed-list .fx { justify-self: end; font-size: 13px; white-space: nowrap; }
+.feed-list .arrow { color: var(--muted); margin: 0 4px; }
+.feed-list .ft { color: var(--muted); }
+.feed-list b.pos { color: var(--up); } .feed-list b.neg { color: var(--down); }
+.feed-more { display: block; width: 100%; font: inherit; font-size: 13px; padding: 9px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text-2); cursor: pointer; border-radius: 0 0 12px 12px; }
+@media (max-width: 560px) {
+  .feed-list a { grid-template-columns: 3.6em 1fr auto; }
+  .feed-list .fb { grid-column: 2; grid-row: 2; }
+  .feed-list .fx { grid-column: 3; grid-row: 1 / span 2; }
+  .feed-list .ft { display: none; }
+}
