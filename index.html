@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020l">
+<link rel="stylesheet" href="assets/style.css?v=20261020m">
 </head>
 <body>
 <div class="wrap">
@@ -48,7 +48,7 @@
 
   <section class="feed" id="feedBox" hidden aria-labelledby="feedHead">
     <h2 class="feed-h" id="feedHead">최근 의견 전환 <span class="sub" id="feedSub"></span></h2>
-    <div class="panel"><ol class="feed-list" id="feed"></ol><button type="button" class="feed-more" id="feedMore" hidden>더 보기</button></div>
+    <div class="panel"><ol class="feed-list" id="feed"></ol><div class="feed-btns" id="feedBtns" hidden><button type="button" class="feed-more" id="feedMore">더 보기</button><button type="button" class="feed-more" id="feedLess" hidden>접기</button></div></div>
   </section>
 
   <p class="count" id="count"></p>
@@ -221,11 +221,19 @@ function renderFeed() {
       <span class="ft">· ${f.from ? fmt(f.from) + '→' : ''}${fmt(f.to)}</span></span></a></li>`;
   });
   document.getElementById('feed').innerHTML = html;
-  const m = document.getElementById('feedMore');
-  m.hidden = flips.length <= feedShown;
-  m.textContent = `더 보기 (${flips.length - feedShown}건 남음)`;
+  // 더 보기로 늘린 뒤에는 '접기'로 처음 12건으로 되돌린다
+  const more = document.getElementById('feedMore'), less = document.getElementById('feedLess');
+  more.hidden = flips.length <= feedShown;
+  more.textContent = `더 보기 (${flips.length - feedShown}건 남음)`;
+  less.hidden = feedShown <= FEED_FIRST;
+  document.getElementById('feedBtns').hidden = more.hidden && less.hidden;
 }
+const FEED_FIRST = 12;
 document.getElementById('feedMore').onclick = () => { feedShown += 20; renderFeed(); };
+document.getElementById('feedLess').onclick = () => {
+  feedShown = FEED_FIRST; renderFeed();
+  document.getElementById('feedBox').scrollIntoView({block: 'start'});
+};
 fetch('data/flips.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   flips = d?.flips || []; renderFeed();
 }).catch(() => {});
