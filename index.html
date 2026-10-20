@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020k">
+<link rel="stylesheet" href="assets/style.css?v=20261020l">
 </head>
 <body>
 <div class="wrap">
@@ -95,6 +95,25 @@ function flipBadge(s) {
   return `<span class="flipc ${cls}" title="최근 2주 안 증권사 의견 전환 (같은 증권사가 직전 리포트와 반대 방향)">⚠&#xFE0E; ${parts.join(' · ')} · ${f.last.slice(5).replace('-', '.')}</span>`;
 }
 
+// 시장 대비 1주·1개월·3개월(%p) + 3개월 상대강도 흐름선(주 단위, 점선 = 3개월 전 수준)
+function spark(rs) {
+  const w = 92, h = 24, pad = 2;
+  const lo = Math.min(100, ...rs), hi = Math.max(100, ...rs);
+  const x = i => pad + i * (w - pad * 2) / (rs.length - 1);
+  const y = v => hi === lo ? h / 2 : pad + (hi - v) * (h - pad * 2) / (hi - lo);
+  const last = rs[rs.length - 1], col = last >= 100 ? 'var(--up)' : 'var(--down)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" role="img" aria-label="3개월 상대강도 흐름">
+    <line x1="${pad}" x2="${w - pad}" y1="${y(100)}" y2="${y(100)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 2"/>
+    <polyline points="${rs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(rs.length - 1)}" cy="${y(last)}" r="2.4" fill="${col}"/></svg>`;
+}
+function relHtml(s, cls) {
+  if (s.rel3 == null && s.r1w == null) return '';
+  const p = (lab, v) => v == null ? '' : `<span class="rp"><small>${lab}</small><b class="${v >= 0 ? 'pos' : 'neg'}">${sg(v)}</b></span>`;
+  return `<span class="nums rel${cls}"><span class="k">시장 대비</span>${p('1주', s.r1w)}${p('1개월', s.r1m)}${p('3개월', s.rel3)}<span class="unit">%p</span>` +
+    (s.rs ? `${spark(s.rs)}<span class="unit">3개월 흐름</span>` : '') + '</span>';
+}
+
 function rowHtml(s) {
   const hl = k => sort === k ? ' sorted' : '';
   return `<li><a href="stock.html?code=${s.code}">
@@ -104,8 +123,8 @@ function rowHtml(s) {
     <span class="nums">
       <span class="${hl('cnt')}">3개월 <span class="pos">▲${s.up3 ?? 0}</span> <span class="neg">▼${s.down3 ?? 0}</span> · 증권사 ${s.brokers3 ?? 0}곳</span>
       ${s.wmean ? `<span class="${hl('gap')}">가중 목표가 <b>${fmt(s.wmean)}</b> <span class="${s.gap >= 0 ? 'pos' : 'neg'}">(${sg(s.gap)}%)</span></span>` : '<span>가중 목표가 -</span>'}
-      ${s.rel3 != null ? `<span class="${hl('rel')}">시장 대비 3개월 <b class="${s.rel3 >= 0 ? 'pos' : 'neg'}">${sg(s.rel3)}%p</b></span>` : ''}
     </span>
+    ${relHtml(s, hl('rel'))}
   </a></li>`;
 }
 

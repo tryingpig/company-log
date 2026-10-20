@@ -304,14 +304,24 @@ def main():
     mdata = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
     mclose = {m: {x["d"]: x["c"] for x in mdata.get(m, [])} for m in MARKETS}
 
-    def rel3(bars, market):
-        """최근 63거래일 종목 수익률 − 지수 수익률(%p). 목록 정렬·표시용."""
+    def relperf(bars, market):
+        """목록용 시장 대비: 1주(5)·1개월(21)·3개월(63거래일) 초과 수익률(%p) + 3개월 상대강도 주 단위 흐름(3개월 전=100)."""
         mc = mclose.get(market) or {}
         rows = [b for b in bars if b["d"] in mc]
-        if len(rows) < 64:
-            return None
-        a, b = rows[-1], rows[-64]
-        return round(((a["c"] / b["c"]) - (mc[a["d"]] / mc[b["d"]])) * 100, 1)
+        out = {}
+        for k, n in (("r1w", 5), ("r1m", 21), ("rel3", 63)):
+            if len(rows) > n:
+                a, b = rows[-1], rows[-1 - n]
+                out[k] = round(((a["c"] / b["c"]) - (mc[a["d"]] / mc[b["d"]])) * 100, 1)
+            else:
+                out[k] = None
+        if len(rows) > 63:
+            base = rows[-64]["c"] / mc[rows[-64]["d"]]
+            pts = list(range(len(rows) - 64, len(rows), 5)) + [len(rows) - 1]
+            out["rs"] = [round(rows[i]["c"] / mc[rows[i]["d"]] / base * 100, 1) for i in sorted(set(pts))]
+        else:
+            out["rs"] = None
+        return out
 
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     index = []
@@ -357,7 +367,7 @@ def main():
                       "flips3": sum(len(b["flips"]) for b in brokers),
                       "brokers3": len(brokers),
                       "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
-                      "rel3": rel3(bars, market),
+                      **relperf(bars, market),
                       "flip2w": {"up": len(rb["up"]), "down": len(rb["down"]), "last": rlast} if rlast else None})
     index.sort(key=lambda x: x["last_date"], reverse=True)
     feed.sort(key=lambda f: (f["date"], f["id"]), reverse=True)

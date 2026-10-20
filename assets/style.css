@@ -374,3 +374,10 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
 }
 .list .flipc.down { color: var(--down); background: var(--down-bg); }
 .list .flipc.up { color: var(--up); background: var(--up-bg); }
+/* 목록: 시장 대비 1주·1개월·3개월 + 3개월 흐름선 */
+.list .nums.rel { align-items: center; gap: 2px 10px; }
+.list .nums.rel .rp { white-space: nowrap; }
+.list .nums.rel .rp small { font-size: 12px; color: var(--muted); margin-right: 3px; }
+.list .nums.rel .unit { font-size: 12px; color: var(--muted); }
+.list .nums.rel .spark { width: 92px; height: 24px; margin-left: 6px; }
+.list .nums.rel.sorted { background: var(--bg); border-radius: 4px; }
