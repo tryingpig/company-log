@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261021d">
+<link rel="stylesheet" href="assets/style.css?v=20261021e">
 </head>
 <body>
 <div class="wrap">
@@ -88,6 +88,8 @@
     </div>
     <div class="chips" id="chips">
       <span class="lab">필터</span>
+      <button type="button" class="chip" data-f="eup" aria-pressed="false" title="5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 상승">▲ 매수 에지</button>
+      <button type="button" class="chip" data-f="edn" aria-pressed="false" title="5·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 네 선 모두 하락">▼ 매도 에지</button>
       <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
       <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
       <button type="button" class="chip" data-f="flip" aria-pressed="false">⚠&#xFE0E; 최근 2주 전환</button>
@@ -123,6 +125,7 @@ const F = {
   KOSPI: s => s.market === 'KOSPI', KOSDAQ: s => s.market === 'KOSDAQ', flip: s => !!s.flip2w,
   upw: s => s.up3 > s.down3, dnw: s => s.down3 > s.up3, week: s => s.last_date.slice(0, 10) > weekCut,
   sig: s => !!s.sig5, sell: s => !!s.sell5,
+  eup: s => s.edge?.s === 1, edn: s => s.edge?.s === -1,
 };
 const KEY = {recent: s => s.last_date, gap: s => s.gap ?? -1e9, rel: s => s.rel3 ?? -1e9, cnt: s => s.up3 + s.down3};
 
@@ -169,7 +172,7 @@ function rowHtml(s) {
   const hl = k => sort === k ? ' sorted' : '';
   return `<li><a href="stock.html?code=${s.code}">
     <span class="nm">${esc(s.name)}<small>${s.code}</small>${s.market ? `<span class="mk">${MK[s.market]}</span>` : ''}</span>
-    <span class="rt">${s.sell5 ? `<span class="sellc" title="최근 5거래일 매도 우위 대량 거래(음봉 + 거래량 2배↑)">▼ 매도 우위 ${s.sell5.d.slice(5).replace('-', '.')}</span>` : ''}${s.sig5 ? `<span class="sigc" title="최근 ${SIG_DAYS_TXT} 강도·거래량 신호">● 신호 ${s.sig5.d.slice(5).replace('-', '.')}</span>` : ''}${flipBadge(s)}${aiTxt(s)}</span>
+    <span class="rt">${edgeBadge(s)}${s.sell5 ? `<span class="sellc" title="최근 5거래일 매도 우위 대량 거래(음봉 + 거래량 2배↑)">▼ 매도 우위 ${s.sell5.d.slice(5).replace('-', '.')}</span>` : ''}${s.sig5 ? `<span class="sigc" title="최근 ${SIG_DAYS_TXT} 강도·거래량 신호">● 신호 ${s.sig5.d.slice(5).replace('-', '.')}</span>` : ''}${flipBadge(s)}${aiTxt(s)}</span>
     <span class="last"><span class="tag ${s.last_dir}">${s.last_dir === 'up' ? '상향' : '하향'}</span>${esc(s.last_date.slice(5))} · ${esc(s.last_broker)} · 목표가 ${fmt(s.last_to)}원</span>
     <span class="nums">
       <span class="${hl('cnt')}">3개월 <span class="pos">▲${s.up3 ?? 0}</span> <span class="neg">▼${s.down3 ?? 0}</span> · 증권사 ${s.brokers3 ?? 0}곳</span>
@@ -234,7 +237,7 @@ document.getElementById('chips').addEventListener('click', e => {
   if (on.has(f)) on.delete(f);
   else {
     on.add(f);
-    const pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', upw: 'dnw', dnw: 'upw'}[f];   // 서로 겹치지 않는 쌍
+    const pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', upw: 'dnw', dnw: 'upw', eup: 'edn', edn: 'eup'}[f];   // 서로 겹치지 않는 쌍
     if (pair) on.delete(pair);
   }
   document.querySelectorAll('#chips .chip').forEach(x => x.setAttribute('aria-pressed', on.has(x.dataset.f)));
@@ -251,6 +254,14 @@ document.getElementById('more').onclick = () => { shown += PAGE; render(); };
 })();
 
 const SIG_DAYS_TXT = '5거래일';
+// 매수·매도 에지: 둘 다 아니면 표시하지 않는다
+function edgeBadge(s) {
+  const e = s.edge;
+  if (!e) return '';
+  const t = `${e.since.slice(5).replace('-', '.')}부터`;
+  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 네 선 모두 상승">▲ 매수 에지 ${e.run}일째</span>`
+                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 네 선 모두 하락">▼ 매도 에지 ${e.run}일째</span>`;
+}
 
 // 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 (주소 끝 #flips · #signals 로 바로 열기)
 function showTab(t) {

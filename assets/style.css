@@ -13,6 +13,7 @@
   --ma5: #eb6834;
   --ma10: #1baf7a;
   --ma20: #6250d6;
+  --ma60: #8a6a3a;
   --bb: #8a8f98;
   --accent: #2a78d6;
   --imp: #8a5a00;         /* 의견 전환 = 중요 표시 */
@@ -36,6 +37,8 @@
     --ma5: #d95926;
     --ma10: #199e70;
     --ma20: #9085e9;
+  --ma60: #c8a46a;
+    --ma60: #c8a46a;
   --bb: #7d838d;
     --bb: #7d838d;
     --accent: #3987e5;
@@ -430,3 +433,16 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
 .sig-rule .rl { margin: 0; padding-left: 20px; display: grid; gap: 3px; }
 .sig-rule .rl li { line-height: 1.5; }
 .sig-rule .rl-n { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+/* 매수·매도 에지 */
+.edgec { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 0 7px; white-space: nowrap; border: 1px solid; }
+.edgec.up { color: var(--up); background: var(--up-bg); border-color: var(--up); }
+.edgec.dn { color: var(--down); background: var(--down-bg); border-color: var(--down); }
+.edge-state { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 0 4px 8px; }
+.edge-state .edgec { font-size: 14px; padding: 1px 10px; }
+.edge-state .es-t { font-size: 13px; color: var(--muted); }
+.edge-strip { padding: 4px 0 2px; }
+.edge-strip .es-lab { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; padding-left: 4px; }
+.edge-strip canvas { width: 100%; height: 10px; display: block; border-radius: 2px; }
+.keyrow .sw.ma60 { height: 3px; }
+.keyrow .eb { display: inline-block; width: 14px; height: 8px; border-radius: 2px; vertical-align: middle; margin: 0 4px 0 2px; }
+.keyrow .eb.up { background: var(--up); } .keyrow .eb.dn { background: var(--down); }

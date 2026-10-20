@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261021d">
+<link rel="stylesheet" href="assets/style.css?v=20261021e">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -29,15 +29,20 @@
   </div>
 
   <div class="panel chart-box" id="secChart">
+    <div class="edge-state" id="edgeState" hidden></div>
     <div class="legend" id="legend"></div>
     <div id="chart"></div>
+    <div class="edge-strip" id="edgeStripBox" hidden>
+      <canvas id="edgeStrip" height="10" aria-label="날짜별 매수·매도 에지 상태"></canvas><span class="es-lab">에지 상태 · 빨강 매수 에지 · 파랑 매도 에지 · 회색 둘 다 아님</span>
+    </div>
     <div class="rs-head" id="rsHead" hidden></div>
     <div id="rschart" hidden></div>
     <div class="chart-key">
       <div class="keyrow">
         <span><span class="sw" style="background:var(--ma5)"></span>5일</span>
         <span><span class="sw" style="background:var(--ma10)"></span>10일</span>
-        <span><span class="sw" style="background:var(--ma20)"></span>20일 이동평균</span>
+        <span><span class="sw" style="background:var(--ma20)"></span>20일</span>
+        <span><span class="sw ma60" style="background:var(--ma60)"></span>60일 이동평균</span>
         <span><span class="sw dash"></span>볼린저</span>
         <span class="sep" aria-hidden="true"></span>
         <span><span class="mk pos">▲</span>목표가 상향</span>
@@ -50,6 +55,8 @@
         <span class="sep" aria-hidden="true"></span>
         <span><span class="mk sigk">●</span>강도·거래량 신호 (양봉만 · ★ 첫 신호)</span>
         <span><span class="mk sellk">■</span>매도 우위 대량 거래 (음봉 + 거래량 2배↑)</span>
+        <span class="sep" aria-hidden="true"></span>
+        <span><span class="eb up"></span>매수 에지 <span class="eb dn"></span>매도 에지 (차트 아래 띠)</span>
         <span class="sep rs-only" aria-hidden="true" hidden></span>
         <span class="rs-only" hidden><span class="sw rs-sw"></span>상대강도 (100 위 = 6개월 동안 시장보다 강함)</span>
       </div>
@@ -68,6 +75,7 @@
           <li>상대강도 = 종목 주가 ÷ 시장 지수(코스피 종목은 코스피, 코스닥 종목은 코스닥)를 차트 첫날 = 100으로 맞춘 값이에요. 선이 오르면 그동안 시장보다 강한 거예요.</li>
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
           <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
+          <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승(모두 만족). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
       </details>
@@ -101,7 +109,7 @@ const fmt = n => n == null ? '-' : n.toLocaleString('ko-KR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const code = new URLSearchParams(location.search).get('code');
-const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20']];
+const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20'], [60, '--ma60']];
 let data, analysis = null, chart, candle, maSeries = [], bbSeries = [], dir = 'all';
 let bbOn = false, volOn = true, volSeries = null, volAvgSeries = null;
 let market = null, rchart = null, rsSeries = null, rsMap = {}, idxMap = {};
@@ -215,7 +223,7 @@ function drawChart() {
 
   // 이동평균은 전체 일봉으로 계산하고 6개월 구간만 표시
   maSeries = MAS.map(([n, v]) => {
-    const s = chart.addLineSeries({color: css(v), lineWidth: 2, priceLineVisible: false,
+    const s = chart.addLineSeries({color: css(v), lineWidth: n === 60 ? 3 : 2, priceLineVisible: false,
                                    lastValueVisible: false, crosshairMarkerVisible: false});
     s.setData(sma(bars, n).filter(p => p.time >= from));
     return s;
@@ -282,6 +290,7 @@ function drawChart() {
   candle.setMarkers(markers);
   chart.timeScale().fitContent();
   if (hasRS) drawRS(rsVis);
+  drawEdge(vis);
 
   chart.subscribeCrosshairMove(p => {
     updateLegend(p.time ? p : null);
@@ -293,6 +302,46 @@ function drawChart() {
     if (p.hoveredObjectId) focusCard(p.hoveredObjectId);
   });
   updateLegend(null);
+}
+
+// 매수·매도 에지: 지금 상태(둘 다 아니면 숨김) + 차트 아래 날짜별 띠
+function drawEdge(vis) {
+  const box = document.getElementById('edgeState');
+  const e = (data.edges || '');
+  const st = data.prices.map((b, i) => ({d: b.d, s: e[i] === '+' ? 1 : e[i] === '-' ? -1 : 0}));
+  const cur = st.length ? st[st.length - 1].s : 0;
+  let run = 0;
+  for (let i = st.length - 1; i >= 0 && cur && st[i].s === cur; i--) run++;
+  if (cur) {
+    const since = st[st.length - run].d.slice(5).replace('-', '.');
+    box.hidden = false;
+    box.innerHTML = cur === 1
+      ? `<span class="edgec up">▲ 매수 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &gt; 20일선 &gt; 60일선, 네 선 모두 상승 중</span>`
+      : `<span class="edgec dn">▼ 매도 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &lt; 20일선 &lt; 60일선, 네 선 모두 하락 중</span>`;
+  } else box.hidden = true;
+  if (!e) return;
+  document.getElementById('edgeStripBox').hidden = false;
+  const cv = document.getElementById('edgeStrip');
+  const byDay = Object.fromEntries(st.map(x => [x.d, x.s]));
+  const paint = () => {
+    const w = cv.clientWidth, dpr = devicePixelRatio || 1;
+    if (!w) return;
+    cv.width = w * dpr; cv.height = 10 * dpr;
+    const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    const ts = chart.timeScale();
+    const xs = vis.map(b => ts.timeToCoordinate(b.d));
+    const up = css('--up'), dn = css('--down'), no = css('--line');
+    vis.forEach((b, j) => {
+      const x = xs[j]; if (x == null) return;
+      const l = j ? (xs[j - 1] + x) / 2 : x - 3, r = j < vis.length - 1 && xs[j + 1] != null ? (x + xs[j + 1]) / 2 : x + 3;
+      const s = byDay[b.d];
+      g.fillStyle = s === 1 ? up : s === -1 ? dn : no;
+      g.fillRect(l, 0, Math.max(1, r - l), 10);
+    });
+  };
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(paint));
+  addEventListener('resize', () => requestAnimationFrame(paint));
+  requestAnimationFrame(paint);
 }
 
 // 상대강도: 종목 ÷ 지수, 차트 첫날 = 100. 가격 눈금과 섞이지 않게 아래 칸에 따로 그린다

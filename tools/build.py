@@ -341,6 +341,36 @@ def main():
                             "trend": bars[i - 1]["c"] > ma_prev})
         return out
 
+    def edge_states(bars):
+        """매수·매도 에지(사용자 정의, 2026-10-21) — 날짜마다 1 / -1 / 0. 모두 AND.
+          매수: 5일선·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승
+          매도: 5일선·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 네 선 모두 전일보다 하락"""
+        c = [b["c"] for b in bars]
+        out = []
+        for i in range(len(c)):
+            if i < 60:
+                out.append(0)
+                continue
+            m = {n: sum(c[i - n + 1:i + 1]) / n for n in (5, 10, 20, 60)}
+            p = {n: sum(c[i - n:i]) / n for n in (5, 10, 20, 60)}
+            if min(m[5], m[10]) > m[20] > m[60] and all(m[n] > p[n] for n in m):
+                out.append(1)
+            elif max(m[5], m[10]) < m[20] < m[60] and all(m[n] < p[n] for n in m):
+                out.append(-1)
+            else:
+                out.append(0)
+        return out
+
+    def edge_now(states, bars):
+        cur = states[-1] if states else 0
+        run = 0
+        for v in reversed(states):
+            if cur and v == cur:
+                run += 1
+            else:
+                break
+        return {"s": cur, "run": run, "since": bars[len(bars) - run]["d"]} if cur else None
+
     tdays = sorted(set(mclose.get("KOSPI", {})))[-SIG_TDAYS:]
     sellfeed = []
     sig_cut = tdays[0] if tdays else "9999"
@@ -384,6 +414,7 @@ def main():
         market = (uni.get(code) or {}).get("market") or old.get("market")
         sigs = strength_signals(bars, market) if market else []
         sells = sell_signals(bars)
+        edges = edge_states(bars)
         for s_ in sells:
             if s_["d"] >= sig_cut:
                 sellfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
@@ -392,6 +423,7 @@ def main():
                 sigfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
         path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now, "market": market,
                                     "signals": sigs, "sells": sells,
+                                    "edges": "".join({1: "+", -1: "-", 0: "."}[x] for x in edges),
                                     "close": close, "close_date": bars[-1]["d"] if bars else None,
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
@@ -420,6 +452,7 @@ def main():
                       "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
                       **relperf(bars, market),
                       "flip2w": {"up": len(rb["up"]), "down": len(rb["down"]), "last": rlast} if rlast else None,
+                      "edge": edge_now(edges, bars),
                       "sell5": next(({"d": s_["d"], "volx": s_["volx"], "trend": s_["trend"]} for s_ in reversed(sells)
                                      if s_["d"] >= sig_cut), None),
                       "sig5": next(({"d": s_["d"], "nth": s_["nth"], "volx": s_["volx"]} for s_ in reversed(sigs)
