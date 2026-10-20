@@ -97,6 +97,7 @@ const fmt = n => n == null ? '-' : Math.round(n).toLocaleString('ko-KR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const sg = v => (v >= 0 ? '+' : '') + v.toFixed(1);
 const MK = {KOSPI: '코스피', KOSDAQ: '코스닥'};
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;   // 로컬 날짜(UTC로 밀리지 않게)
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const PAGE = 80;
 let stocks = [], sort = 'recent', on = new Set(), shown = PAGE, weekCut = '';
@@ -359,14 +360,22 @@ function renderFeed() {
   less.hidden = feedShown <= FEED_FIRST;
   document.getElementById('feedBtns').hidden = more.hidden && less.hidden;
 }
-const FEED_FIRST = 12;
+let FEED_FIRST = 12;                                   // 데이터를 받으면 '최근 7일 전부'로 바뀐다
 document.getElementById('feedMore').onclick = () => { feedShown += 20; renderFeed(); };
 document.getElementById('feedLess').onclick = () => {
   feedShown = FEED_FIRST; renderFeed();
   document.getElementById('feedBox').scrollIntoView({block: 'start'});
 };
 fetch('data/flips.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
-  flips = d?.flips || []; renderFeed();
+  flips = d?.flips || [];
+  // 처음에는 최근 7일(가장 최근 전환일 포함)을 다 펼쳐 보여주고, 그 이전만 '더 보기'로
+  if (flips.length) {
+    const c = new Date(flips[0].date.slice(0, 10) + 'T00:00:00'); c.setDate(c.getDate() - 6);
+    const cut = ymd(c);
+    FEED_FIRST = Math.max(1, flips.filter(f => f.date.slice(0, 10) >= cut).length);
+    feedShown = FEED_FIRST;
+  }
+  renderFeed();
   const lastDay = flips[0]?.date.slice(0, 10);
   const n = flips.filter(f => f.date.slice(0, 10) === lastDay).length;
   document.getElementById('tnFlips').textContent = n ? n : '';
@@ -376,7 +385,7 @@ fetch('data/index.json', {cache: 'no-cache'}).then(r => r.json()).then(d => {
   stocks = d.stocks;
   const last = stocks.reduce((m, s) => s.last_date > m ? s.last_date : m, '');
   const w = new Date(last.slice(0, 10) + 'T00:00:00'); w.setDate(w.getDate() - 7);
-  weekCut = w.toISOString().slice(0, 10);
+  weekCut = ymd(w);
   document.getElementById('updated').textContent = `${stocks.length}종목 · 갱신 ${d.updated}`;
   render();
 });
