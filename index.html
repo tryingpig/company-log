@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261021a">
+<link rel="stylesheet" href="assets/style.css?v=20261021b">
 </head>
 <body>
 <div class="wrap">
@@ -42,7 +42,7 @@
   <div role="tabpanel" id="pane-signals" aria-labelledby="tab-signals" hidden>
     <section class="feed" aria-labelledby="sigHead">
       <h2 class="feed-h" id="sigHead">강도·거래량 신호 <span class="sub" id="sigSub"></span></h2>
-      <p class="sig-rule">조건: <b>상대강도(종목 ÷ 지수) 20일 신고가</b> + <b>거래량 평소의 2배 이상</b> + <b>종가가 20일선 위</b> · 같은 종목이 다시 나와도 모두 보여주고, 첫 신호인지 몇 번째인지 표시 · 리포트가 온 적 있는 종목 안에서만 찾음</p>
+      <p class="sig-rule">조건: <b>상대강도(종목 ÷ 지수) 20일 신고가</b> + <b>거래량 평소의 2배 이상</b> + <b>종가가 20일선 위</b> + <b>양봉이고 전일보다 상승</b>(음봉 대량 거래는 매도 우위라 제외) · 같은 종목이 다시 나와도 모두 보여주고, 첫 신호인지 몇 번째인지 표시 · 리포트가 온 적 있는 종목 안에서만 찾음</p>
       <div class="chips"><button type="button" class="chip" id="sigFirst" aria-pressed="false">첫 신호만</button></div>
       <div class="panel"><ol class="feed-list sig-list" id="sigList"></ol><div class="feed-btns" id="sigBtns" hidden><button type="button" class="feed-more" id="sigMore">더 보기</button><button type="button" class="feed-more" id="sigLess" hidden>접기</button></div></div>
     </section>

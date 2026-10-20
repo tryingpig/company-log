@@ -309,7 +309,8 @@ def main():
         """강도·거래량 신호(사용자 정의 조건, 2026-10-20): 그날
           ① 상대강도(종가 ÷ 지수)가 직전 20거래일 최고치를 넘고
           ② 거래량이 평소(그날 뺀 직전 20거래일 평균)의 2배 이상이고
-          ③ 종가가 20일 이동평균 위.
+          ③ 종가가 20일 이동평균 위
+          ④ 양봉(종가 > 시가)이고 전일 종가보다 상승 — 음봉 대량 거래는 매도 우위라 제외(사용자 결정 2026-10-21).
         nth = 직전 20거래일 안 신호 수 + 1 (1이면 첫 신호)."""
         mc = mclose.get(market) or {}
         rows = [b for b in bars if b["d"] in mc]
@@ -318,7 +319,8 @@ def main():
         for i in range(21, len(rows)):
             va = sum(b["v"] for b in rows[i - 20:i]) / 20
             ma = sum(b["c"] for b in rows[i - 19:i + 1]) / 20
-            if va and rs[i] > max(rs[i - 20:i]) and rows[i]["v"] / va >= 2 and rows[i]["c"] > ma:
+            if (va and rs[i] > max(rs[i - 20:i]) and rows[i]["v"] / va >= 2 and rows[i]["c"] > ma
+                    and rows[i]["c"] > rows[i]["o"] and rows[i]["c"] > rows[i - 1]["c"]):
                 nth = sum(1 for j in idx if i - 20 <= j < i) + 1
                 idx.append(i)
                 out.append({"d": rows[i]["d"], "volx": round(rows[i]["v"] / va, 1), "nth": nth,
