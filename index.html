@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020m">
+<link rel="stylesheet" href="assets/style.css?v=20261021a">
 </head>
 <body>
 <div class="wrap">
@@ -25,6 +25,30 @@
     <span class="meta" id="updated"></span>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="보기">
+    <button type="button" role="tab" id="tab-list" aria-controls="pane-list" aria-selected="true" data-tab="list">종목 목록</button>
+    <button type="button" role="tab" id="tab-flips" aria-controls="pane-flips" aria-selected="false" data-tab="flips">의견 전환 <span class="tn" id="tnFlips"></span></button>
+    <button type="button" role="tab" id="tab-signals" aria-controls="pane-signals" aria-selected="false" data-tab="signals">강도·거래량 신호 <span class="tn" id="tnSig"></span></button>
+  </nav>
+
+  <div role="tabpanel" id="pane-flips" aria-labelledby="tab-flips" hidden>
+  <section class="feed" id="feedBox" aria-labelledby="feedHead">
+    <h2 class="feed-h" id="feedHead">최근 의견 전환 <span class="sub" id="feedSub"></span></h2>
+    <div class="panel"><ol class="feed-list" id="feed"></ol><div class="feed-btns" id="feedBtns" hidden><button type="button" class="feed-more" id="feedMore">더 보기</button><button type="button" class="feed-more" id="feedLess" hidden>접기</button></div></div>
+  </section>
+
+  </div>
+
+  <div role="tabpanel" id="pane-signals" aria-labelledby="tab-signals" hidden>
+    <section class="feed" aria-labelledby="sigHead">
+      <h2 class="feed-h" id="sigHead">강도·거래량 신호 <span class="sub" id="sigSub"></span></h2>
+      <p class="sig-rule">조건: <b>상대강도(종목 ÷ 지수) 20일 신고가</b> + <b>거래량 평소의 2배 이상</b> + <b>종가가 20일선 위</b> · 같은 종목이 다시 나와도 모두 보여주고, 첫 신호인지 몇 번째인지 표시 · 리포트가 온 적 있는 종목 안에서만 찾음</p>
+      <div class="chips"><button type="button" class="chip" id="sigFirst" aria-pressed="false">첫 신호만</button></div>
+      <div class="panel"><ol class="feed-list sig-list" id="sigList"></ol><div class="feed-btns" id="sigBtns" hidden><button type="button" class="feed-more" id="sigMore">더 보기</button><button type="button" class="feed-more" id="sigLess" hidden>접기</button></div></div>
+    </section>
+  </div>
+
+  <div role="tabpanel" id="pane-list" aria-labelledby="tab-list">
   <div class="toolbar">
     <div class="tb-row">
       <input id="q" type="search" placeholder="종목명 또는 코드 검색" autocomplete="off">
@@ -43,17 +67,14 @@
       <button type="button" class="chip" data-f="upw" aria-pressed="false">상향 우세</button>
       <button type="button" class="chip" data-f="dnw" aria-pressed="false">하향 우세</button>
       <button type="button" class="chip" data-f="week" aria-pressed="false">이번 주 리포트</button>
+      <button type="button" class="chip" data-f="sig" aria-pressed="false">● 강도·거래량 신호</button>
     </div>
   </div>
-
-  <section class="feed" id="feedBox" hidden aria-labelledby="feedHead">
-    <h2 class="feed-h" id="feedHead">최근 의견 전환 <span class="sub" id="feedSub"></span></h2>
-    <div class="panel"><ol class="feed-list" id="feed"></ol><div class="feed-btns" id="feedBtns" hidden><button type="button" class="feed-more" id="feedMore">더 보기</button><button type="button" class="feed-more" id="feedLess" hidden>접기</button></div></div>
-  </section>
 
   <p class="count" id="count"></p>
   <div id="groups"></div>
   <button type="button" class="more" id="more" hidden>더 보기</button>
+  </div>
 </div>
 
 <nav class="fab" aria-label="페이지 이동">
@@ -72,6 +93,7 @@ let stocks = [], sort = 'recent', on = new Set(), shown = PAGE, weekCut = '';
 const F = {
   KOSPI: s => s.market === 'KOSPI', KOSDAQ: s => s.market === 'KOSDAQ', flip: s => !!s.flip2w,
   upw: s => s.up3 > s.down3, dnw: s => s.down3 > s.up3, week: s => s.last_date.slice(0, 10) > weekCut,
+  sig: s => !!s.sig5,
 };
 const KEY = {recent: s => s.last_date, gap: s => s.gap ?? -1e9, rel: s => s.rel3 ?? -1e9, cnt: s => s.up3 + s.down3};
 
@@ -118,7 +140,7 @@ function rowHtml(s) {
   const hl = k => sort === k ? ' sorted' : '';
   return `<li><a href="stock.html?code=${s.code}">
     <span class="nm">${esc(s.name)}<small>${s.code}</small>${s.market ? `<span class="mk">${MK[s.market]}</span>` : ''}</span>
-    <span class="rt">${flipBadge(s)}${aiTxt(s)}</span>
+    <span class="rt">${s.sig5 ? `<span class="sigc" title="최근 ${SIG_DAYS_TXT} 강도·거래량 신호">● 신호 ${s.sig5.d.slice(5).replace('-', '.')}</span>` : ''}${flipBadge(s)}${aiTxt(s)}</span>
     <span class="last"><span class="tag ${s.last_dir}">${s.last_dir === 'up' ? '상향' : '하향'}</span>${esc(s.last_date.slice(5))} · ${esc(s.last_broker)} · 목표가 ${fmt(s.last_to)}원</span>
     <span class="nums">
       <span class="${hl('cnt')}">3개월 <span class="pos">▲${s.up3 ?? 0}</span> <span class="neg">▼${s.down3 ?? 0}</span> · 증권사 ${s.brokers3 ?? 0}곳</span>
@@ -162,7 +184,7 @@ function render() {
   more.hidden = rows.length <= shown;
   more.textContent = `더 보기 (${rows.length - shown}종목 남음)`;
   // 칩 옆 숫자: 지금 조건에서 그 칩까지 고르면 남는 종목 수
-  document.querySelectorAll('.chip').forEach(c => {
+  document.querySelectorAll('#chips .chip').forEach(c => {
     const n = stocks.filter(s => match(s) && [...on, c.dataset.f].every(k => F[k](s))).length;
     let el = c.querySelector('.n');
     if (!el) { el = document.createElement('span'); el.className = 'n'; c.append(el); }
@@ -186,7 +208,7 @@ document.getElementById('chips').addEventListener('click', e => {
     const pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', upw: 'dnw', dnw: 'upw'}[f];   // 서로 겹치지 않는 쌍
     if (pair) on.delete(pair);
   }
-  document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', on.has(x.dataset.f)));
+  document.querySelectorAll('#chips .chip').forEach(x => x.setAttribute('aria-pressed', on.has(x.dataset.f)));
   shown = PAGE; render();
 });
 document.getElementById('more').onclick = () => { shown += PAGE; render(); };
@@ -199,13 +221,76 @@ document.getElementById('more').onclick = () => { shown += PAGE; render(); };
   addEventListener('scroll', onScroll, {passive: true}); onScroll();
 })();
 
+const SIG_DAYS_TXT = '5거래일';
+
+// 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 (주소 끝 #flips · #signals 로 바로 열기)
+function showTab(t) {
+  if (!['list', 'flips', 'signals'].includes(t)) t = 'list';
+  document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  ['list', 'flips', 'signals'].forEach(k => { document.getElementById('pane-' + k).hidden = k !== t; });
+  const h = t === 'list' ? '' : '#' + t;
+  if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
+}
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('[role=tab]'); if (b) showTab(b.dataset.tab);
+});
+document.querySelector('.tabs').addEventListener('keydown', e => {
+  if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+  const tabs = [...document.querySelectorAll('.tabs [role=tab]')];
+  const i = tabs.indexOf(document.activeElement); if (i < 0) return;
+  const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+  n.focus(); showTab(n.dataset.tab);
+});
+addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+showTab(location.hash.slice(1));
+
+// 강도·거래량 신호 탭
+let sigs = [], sigFirst = false, sigShown = 30;
+const SIG_FIRST = 30;
+function sigSpark(rs) {
+  if (!rs) return '';
+  const w = 72, h = 22, p = 2, lo = Math.min(100, ...rs), hi = Math.max(100, ...rs);
+  const x = i => p + i * (w - p * 2) / (rs.length - 1), y = v => hi === lo ? h / 2 : p + (hi - v) * (h - p * 2) / (hi - lo);
+  const last = rs[rs.length - 1], col = last >= 100 ? 'var(--up)' : 'var(--down)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="${p}" x2="${w - p}" y1="${y(100)}" y2="${y(100)}" stroke="var(--muted)" stroke-dasharray="2 2"/><polyline points="${rs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="1.6"/><circle cx="${x(rs.length - 1)}" cy="${y(last)}" r="2.2" fill="${col}"/></svg>`;
+}
+function renderSig() {
+  const rows = sigs.filter(f => !sigFirst || f.nth === 1);
+  document.getElementById('sigSub').textContent = `최근 5거래일 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  let html = '', day = '';
+  rows.slice(0, sigShown).forEach(f => {
+    if (f.date !== day) { day = f.date; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})</li>`; }
+    html += `<li><a class="sig-row" href="stock.html?code=${f.code}">
+      <span class="fn">${esc(f.name)}<small class="mk">${MK[f.market]}</small></span>
+      <span class="sv"><span class="k">거래량</span><b>${f.volx.toFixed(1)}배</b></span>
+      <span class="sv"><span class="k">그날</span><b class="${f.chg >= 0 ? 'pos' : 'neg'}">${sg(f.chg)}%</b></span>
+      <span class="ss"><span class="k">시장 대비 3개월</span><b class="${(f.rel3 ?? 0) >= 0 ? 'pos' : 'neg'}">${f.rel3 == null ? '-' : sg(f.rel3) + '%p'}</b>${sigSpark(f.rs)}</span>
+      <span class="nth ${f.nth === 1 ? 'first' : 'again'}">${f.nth === 1 ? '첫 신호' : `20일 내 ${f.nth}번째`}</span></a></li>`;
+  });
+  document.getElementById('sigList').innerHTML = html || '<li class="empty">최근 5거래일 동안 신호가 없어요</li>';
+  const more = document.getElementById('sigMore'), less = document.getElementById('sigLess');
+  more.hidden = rows.length <= sigShown;
+  more.textContent = `더 보기 (${rows.length - sigShown}건 남음)`;
+  less.hidden = sigShown <= SIG_FIRST;
+  document.getElementById('sigBtns').hidden = more.hidden && less.hidden;
+}
+document.getElementById('sigFirst').onclick = e => { sigFirst = !sigFirst; e.currentTarget.setAttribute('aria-pressed', sigFirst); sigShown = SIG_FIRST; renderSig(); };
+document.getElementById('sigMore').onclick = () => { sigShown += 30; renderSig(); };
+document.getElementById('sigLess').onclick = () => { sigShown = SIG_FIRST; renderSig(); document.getElementById('pane-signals').scrollIntoView({block: 'start'}); };
+fetch('data/signals.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
+  sigs = d?.signals || [];
+  const last = d?.tdays?.[d.tdays.length - 1];
+  const n = sigs.filter(f => f.date === last).length;
+  document.getElementById('tnSig').textContent = n ? n : '';
+  renderSig();
+}).catch(() => {});
+
 // 최근 의견 전환: 같은 증권사가 직전 리포트와 반대 방향(상향↔하향)으로 낸 리포트, 최신순
 const DIRK = {up: '상향', down: '하향'};
 let flips = [], feedShown = 12;
 function renderFeed() {
   const box = document.getElementById('feedBox');
-  if (!flips.length) { box.hidden = true; return; }
-  box.hidden = false;
+  if (!flips.length) { document.getElementById('feed').innerHTML = '<li class="empty">최근 2주 동안 의견 전환이 없어요</li>'; return; }
   document.getElementById('feedSub').textContent =
     `최근 2주 · ${flips.length}건 · ${new Set(flips.map(f => f.code)).size}종목 · 최신순`;
   let html = '', day = '';
@@ -236,6 +321,9 @@ document.getElementById('feedLess').onclick = () => {
 };
 fetch('data/flips.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   flips = d?.flips || []; renderFeed();
+  const lastDay = flips[0]?.date.slice(0, 10);
+  const n = flips.filter(f => f.date.slice(0, 10) === lastDay).length;
+  document.getElementById('tnFlips').textContent = n ? n : '';
 }).catch(() => {});
 
 fetch('data/index.json', {cache: 'no-cache'}).then(r => r.json()).then(d => {

@@ -190,6 +190,7 @@ def fetch_bars(code):
 
 WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
 FEED_DAYS = 14       # 목록 맨 위 '최근 의견 전환' 칸에 보여줄 기간
+SIG_TDAYS = 5        # '강도·거래량 신호' 탭에 보여줄 최근 거래일 수
 FLIP_DAYS = 183      # 전환(같은 증권사 상향↔하향)은 직전 리포트를 6개월까지 거슬러 찾는다 (2026-10-20 사용자 결정)
 
 
@@ -304,6 +305,30 @@ def main():
     mdata = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
     mclose = {m: {x["d"]: x["c"] for x in mdata.get(m, [])} for m in MARKETS}
 
+    def strength_signals(bars, market):
+        """강도·거래량 신호(사용자 정의 조건, 2026-10-20): 그날
+          ① 상대강도(종가 ÷ 지수)가 직전 20거래일 최고치를 넘고
+          ② 거래량이 평소(그날 뺀 직전 20거래일 평균)의 2배 이상이고
+          ③ 종가가 20일 이동평균 위.
+        nth = 직전 20거래일 안 신호 수 + 1 (1이면 첫 신호)."""
+        mc = mclose.get(market) or {}
+        rows = [b for b in bars if b["d"] in mc]
+        rs = [b["c"] / mc[b["d"]] for b in rows]
+        out, idx = [], []
+        for i in range(21, len(rows)):
+            va = sum(b["v"] for b in rows[i - 20:i]) / 20
+            ma = sum(b["c"] for b in rows[i - 19:i + 1]) / 20
+            if va and rs[i] > max(rs[i - 20:i]) and rows[i]["v"] / va >= 2 and rows[i]["c"] > ma:
+                nth = sum(1 for j in idx if i - 20 <= j < i) + 1
+                idx.append(i)
+                out.append({"d": rows[i]["d"], "volx": round(rows[i]["v"] / va, 1), "nth": nth,
+                            "chg": round((rows[i]["c"] / rows[i - 1]["c"] - 1) * 100, 1)})
+        return out
+
+    tdays = sorted(set(mclose.get("KOSPI", {})))[-SIG_TDAYS:]
+    sig_cut = tdays[0] if tdays else "9999"
+    sigfeed = []
+
     def relperf(bars, market):
         """목록용 시장 대비: 1주(5)·1개월(21)·3개월(63거래일) 초과 수익률(%p) + 3개월 상대강도 주 단위 흐름(3개월 전=100)."""
         mc = mclose.get(market) or {}
@@ -340,7 +365,12 @@ def main():
         close = bars[-1]["c"] if bars else None
         brokers, consensus = summarize_brokers(reps, close)
         market = (uni.get(code) or {}).get("market") or old.get("market")
+        sigs = strength_signals(bars, market) if market else []
+        for s_ in sigs:
+            if s_["d"] >= sig_cut:
+                sigfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
         path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now, "market": market,
+                                    "signals": sigs,
                                     "close": close, "close_date": bars[-1]["d"] if bars else None,
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
@@ -368,9 +398,18 @@ def main():
                       "brokers3": len(brokers),
                       "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
                       **relperf(bars, market),
-                      "flip2w": {"up": len(rb["up"]), "down": len(rb["down"]), "last": rlast} if rlast else None})
+                      "flip2w": {"up": len(rb["up"]), "down": len(rb["down"]), "last": rlast} if rlast else None,
+                      "sig5": next(({"d": s_["d"], "nth": s_["nth"], "volx": s_["volx"]} for s_ in reversed(sigs)
+                                    if s_["d"] >= sig_cut), None)})
     index.sort(key=lambda x: x["last_date"], reverse=True)
     feed.sort(key=lambda f: (f["date"], f["id"]), reverse=True)
+    for f_ in sigfeed:                                        # 목록 줄과 같은 숫자를 쓰도록 시장 대비·흐름선을 붙인다
+        e = next((x for x in index if x["code"] == f_["code"]), {})
+        f_.update(rel3=e.get("rel3"), rs=e.get("rs"))
+        f_.pop("d", None)
+    sigfeed.sort(key=lambda f: (f["date"], f["volx"]), reverse=True)
+    (DATA / "signals.json").write_text(json.dumps({"updated": now, "tdays": tdays, "signals": sigfeed},
+                                                  ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (DATA / "flips.json").write_text(json.dumps({"updated": now, "days": FEED_DAYS, "flips": feed},
                                                 ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (DATA / "index.json").write_text(json.dumps({"updated": now, "stocks": index},
