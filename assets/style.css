@@ -372,3 +372,5 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
   .feed-list .fx { grid-column: 3; grid-row: 1 / span 2; }
   .feed-list .ft { display: none; }
 }
+.list .flipc.down { color: var(--down); background: var(--down-bg); }
+.list .flipc.up { color: var(--up); background: var(--up-bg); }

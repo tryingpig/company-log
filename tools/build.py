@@ -335,8 +335,12 @@ def main():
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},
                                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        rb = {"up": set(), "down": set()}                        # 최근 2주 전환: 바뀐 뒤 방향별 증권사(중복 없이)
+        rlast = None
         for r in reps:
             if r.get("flip") and r["date"][:10] >= feed_cut:
+                rb[r["dir"]].add(r["broker"])
+                rlast = max(rlast or "", r["date"][:10])
                 feed.append({"date": r["date"][:16], "code": code, "name": v["name"], "broker": r["broker"],
                              "prev_dir": r["prev_dir"], "dir": r["dir"], "from": r["from"], "to": r["to"], "id": r["id"]})
         last = reps[0]
@@ -353,7 +357,8 @@ def main():
                       "flips3": sum(len(b["flips"]) for b in brokers),
                       "brokers3": len(brokers),
                       "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
-                      "rel3": rel3(bars, market)})
+                      "rel3": rel3(bars, market),
+                      "flip2w": {"up": len(rb["up"]), "down": len(rb["down"]), "last": rlast} if rlast else None})
     index.sort(key=lambda x: x["last_date"], reverse=True)
     feed.sort(key=lambda f: (f["date"], f["id"]), reverse=True)
     (DATA / "flips.json").write_text(json.dumps({"updated": now, "days": FEED_DAYS, "flips": feed},
