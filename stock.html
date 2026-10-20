@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020d">
+<link rel="stylesheet" href="assets/style.css?v=20261020e">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -477,7 +477,7 @@ function renderBrokers() {
       <summary>
         <span class="bn">${esc(b.broker)}${b.flips.length ? ' <span class="imp sm">⚠ 전환</span>' : ''}</span>
         <span class="bt"><b>${fmt(b.target)}원</b> <span class="${pctCls(b.gap)}">${pctTxt(b.gap)}</span></span>
-        <span class="bm"><span class="tag ${b.last_dir}">${dirName(b.last_dir)}</span> ${esc(b.opinion)} · ${b.last_date.slice(0, 10)} · ${b.count}건${b.single ? ' <span class="muted">(3개월 내 1건 · 전환 판단 불가)</span>' : ''}</span>
+        <span class="bm"><span class="tag ${b.last_dir}">${dirName(b.last_dir)}</span> ${esc(b.opinion)} · ${b.last_date.slice(0, 10)} · ${b.count}건${b.single ? ' <span class="muted">(6개월 내 1건 · 전환 판단 불가)</span>' : ''}</span>
       </summary>
       <div class="brk-body">
         ${flips}
@@ -502,7 +502,7 @@ document.addEventListener('click', e => {
 /* ── 로그 ── */
 function card(r) {
   const up = r.dir === 'up';
-  const flip = r.flip ? `<div class="flip in-card"><span class="imp">⚠ 의견 전환</span> ${esc(r.broker)} 직전 ${dirName(r.prev_dir)} → 이번 ${dirName(r.dir)}
+  const flip = r.flip ? `<div class="flip in-card"><span class="imp">⚠ 의견 전환</span> ${esc(r.broker)} 직전${r.prev_date ? `(${r.prev_date.slice(5)})` : ""} ${dirName(r.prev_dir)} → 이번 ${dirName(r.dir)}
       ${analysis?.flips?.[r.id] ? `<div class="flip-note">${esc(analysis.flips[r.id])}</div>` : ''}</div>` : '';
   const pct = r.diff != null && r.from ? ` (${r.diff > 0 ? '+' : ''}${(r.diff / r.from * 100).toFixed(1)}%)` : '';
   const target = r.from != null

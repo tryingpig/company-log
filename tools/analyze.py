@@ -548,7 +548,8 @@ def summary_prompt(d):
              f"리포트 {len(d['reports'])}건 (오래된 순, 최근 3개월)", ""]
     for r in sorted(d["reports"], key=lambda r: r["id"]):
         tgt = f"{r['from']:,} → {r['to']:,}" if r["from"] else f"{r['to']:,} (이전값 없음)"
-        flip = " [전환]" if r.get("flip") else ""
+        flip = (f" [전환: 직전 {r.get('prev_date', '')} {'상향' if r.get('prev_dir') == 'up' else '하향'}]"
+                if r.get("flip") else "")
         lines.append(f"#{r['id']} | {r['date'][:10]} | {r['broker']} | "
                      f"{'상향' if r['dir'] == 'up' else '하향'}{flip} | 목표가 {tgt} | {r['opinion']}")
         lines.append(f"제목: {r['title']}")
@@ -730,6 +731,7 @@ async def summarize(a, d, sem):
     a["brokers"] = {b["broker"]: {"numbers": b.get("numbers") or [], "view": b.get("view") or []}
                     for b in res.get("brokers") or [] if b.get("broker")}
     a["flips"] = {str(f["id"]): f.get("note", "") for f in res.get("flips") or [] if f.get("id") in flip_ids}
+    a["flip_seen"] = sorted(str(i) for i in flip_ids)          # 사유를 물어본 전환 (못 받아도 다시 묻지 않음)
     a["generated"] = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     a["needs_summary"] = False
     return set(r["broker"] for r in d["win_reports"]) - set(a["brokers"])
@@ -745,6 +747,11 @@ async def run_async(codes, force=False, deadline=None):
         if force:
             a.update(done=[], line_status={}, needs_summary=True, **{k: [] for k in ITEM_KINDS})
         prune(a, d)
+        # 전환 기준이 바뀌어(6개월) 새로 잡힌 전환이 있으면 사유를 받으러 의견 정리를 다시 한다
+        new_flips = {str(r["id"]) for r in d["win_reports"] if r.get("flip")} \
+            - set(a.get("flips") or {}) - set(a.get("flip_seen") or [])
+        if new_flips and a.get("generated"):
+            a["needs_summary"] = True
         stocks[code] = (d, a)
         done = set(a["done"])
         by_b = {}

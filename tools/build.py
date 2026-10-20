@@ -165,7 +165,8 @@ def fetch_bars(code):
 
 # ── 증권사별 집계 (코드 계산 — 로그에 적힌 목표가만 쓴다) ──────────────────────
 
-WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·전환·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
+WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
+FLIP_DAYS = 183      # 전환(같은 증권사 상향↔하향)은 직전 리포트를 6개월까지 거슬러 찾는다 (2026-10-20 사용자 결정)
 
 
 HALF_LIFE = 30       # 최근 가중: 30일 지날 때마다 무게 절반 (오늘 1 → 30일 전 0.5 → 60일 전 0.25)
@@ -182,19 +183,26 @@ def _gap(target, close):
 
 
 def summarize_brokers(reps, close):
-    """reps: 최신순. 최근 3개월 리포트로 증권사별 최신 목표가·괴리율, 같은 증권사 안의 상향↔하향 전환, 통합 목표가."""
-    cutoff = (datetime.now(KST) - timedelta(days=WINDOW_DAYS)).strftime("%Y-%m-%d")
+    """reps: 최신순. 최근 3개월 리포트로 증권사별 최신 목표가·괴리율·통합 목표가.
+    전환(같은 증권사 상향↔하향)은 직전 리포트를 6개월(FLIP_DAYS)까지 거슬러 찾는다."""
+    now = datetime.now(KST)
+    cutoff = (now - timedelta(days=WINDOW_DAYS)).strftime("%Y-%m-%d")
+    flip_cut = (now - timedelta(days=FLIP_DAYS)).strftime("%Y-%m-%d")
     for r in reps:
         r["win"] = r["date"][:10] >= cutoff
         r["flip"] = False
         r.pop("prev_dir", None)
+        r.pop("prev_date", None)
+    last6, n6 = {}, {}
+    for r in sorted((r for r in reps if r["date"][:10] >= flip_cut), key=lambda r: r["id"]):   # 오래된 것부터
+        prev = last6.get(r["broker"])
+        if prev and prev["dir"] != r["dir"]:
+            r["flip"], r["prev_dir"], r["prev_date"] = True, prev["dir"], prev["date"][:10]
+        last6[r["broker"]] = r
+        n6[r["broker"]] = n6.get(r["broker"], 0) + 1
     reps = [r for r in reps if r["win"]]
     by_broker = {}
-    for r in sorted(reps, key=lambda r: r["id"]):           # 오래된 것부터 훑어 전환을 찾는다
-        prev = by_broker.get(r["broker"])
-        r["flip"] = bool(prev and prev["dir"] != r["dir"])
-        if r["flip"]:
-            r["prev_dir"] = prev["dir"]
+    for r in sorted(reps, key=lambda r: r["id"]):
         by_broker[r["broker"]] = r
 
     brokers = []
@@ -208,7 +216,7 @@ def summarize_brokers(reps, close):
             "gap": _gap(last["to"], close),
             "weight": recency_weight(last["date"]),
             "flips": [r["id"] for r in mine if r.get("flip")],
-            "single": len(mine) == 1,                         # 3개월 안 1건 → 전환 판단 불가
+            "single": n6.get(name, 0) == 1,                   # 6개월 안 1건 → 전환 판단 불가
         })
     brokers.sort(key=lambda b: b["last_id"], reverse=True)
 
