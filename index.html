@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261021c">
+<link rel="stylesheet" href="assets/style.css?v=20261021d">
 </head>
 <body>
 <div class="wrap">
@@ -46,13 +46,30 @@
     </div>
     <section class="feed" id="buyBox" aria-labelledby="sigHead">
       <h2 class="feed-h" id="sigHead">강도·거래량 신호 <span class="sub" id="sigSub"></span></h2>
-      <p class="sig-rule">조건: <b>상대강도(종목 ÷ 지수) 20일 신고가</b> + <b>거래량 평소의 2배 이상</b> + <b>종가가 20일선 위</b> + <b>양봉이고 전일보다 상승</b>(음봉 대량 거래는 매도 우위라 제외) · 같은 종목이 다시 나와도 모두 보여주고, 첫 신호인지 몇 번째인지 표시 · 리포트가 온 적 있는 종목 안에서만 찾음</p>
+      <div class="sig-rule">
+        <p class="rl-h">▲ 매수 우위 — 아래 다섯 가지를 <b>같은 날 모두</b> 만족한 날만 보여줘요</p>
+        <ol class="rl">
+          <li><b>상대강도(종목 ÷ 지수)</b>가 직전 20거래일 최고치를 넘음 — 차트 상대강도 칸의 100(6개월 전 수준)을 넘을 필요는 없고, 최근 20일보다 강해지면 돼요</li>
+          <li><b>거래량</b>이 평소(그날을 뺀 직전 20거래일 평균)의 2배 이상</li>
+          <li><b>종가가 20일선 위</b></li>
+          <li><b>양봉</b> (종가가 시가보다 높음)</li>
+          <li><b>전일 종가보다 상승</b></li>
+        </ol>
+        <p class="rl-n">같은 종목이 다시 나와도 모두 보여주고, 첫 신호(직전 20거래일 동안 신호 없음)인지 몇 번째인지 표시해요 · 리포트가 온 적 있는 종목 안에서만 찾아요</p>
+      </div>
       <div class="chips"><button type="button" class="chip" id="sigFirst" aria-pressed="false">첫 신호만</button></div>
       <div class="panel"><ol class="feed-list sig-list" id="sigList"></ol><div class="feed-btns" id="sigBtns" hidden><button type="button" class="feed-more" id="sigMore">더 보기</button><button type="button" class="feed-more" id="sigLess" hidden>접기</button></div></div>
     </section>
     <section class="feed" id="sellBox" aria-labelledby="sellHead" hidden>
       <h2 class="feed-h" id="sellHead">매도 우위 대량 거래 <span class="sub" id="sellSub"></span></h2>
-      <p class="sig-rule">조건: <b>음봉(종가가 시가보다 낮음)</b> + <b>거래량 평소의 2배 이상</b> · 많이 거래됐지만 파는 쪽이 이긴 날 · 일봉엔 매수·매도 체결 구분이 없어 캔들로 판단</p>
+      <div class="sig-rule">
+        <p class="rl-h">▼ 매도 우위 — 아래 두 가지를 같은 날 만족한 날을 보여줘요</p>
+        <ol class="rl">
+          <li><b>음봉</b> (종가가 시가보다 낮음)</li>
+          <li><b>거래량</b>이 평소(그날을 뺀 직전 20거래일 평균)의 2배 이상</li>
+        </ol>
+        <p class="rl-n">많이 거래됐지만 파는 쪽이 이긴 날이에요. 상대강도·20일선은 보지 않고, 대신 줄마다 "상승 추세 중"(전날 종가가 20일선 위) / "20일선 아래"를 표시해요 · 일봉엔 매수·매도 체결 구분이 없어 캔들로 판단해요</p>
+      </div>
       <div class="chips"><button type="button" class="chip" id="sellTrend" aria-pressed="false">상승 추세 중만 (전일 20일선 위)</button></div>
       <div class="panel"><ol class="feed-list sig-list" id="sellList"></ol><div class="feed-btns" id="sellBtns" hidden><button type="button" class="feed-more" id="sellMore">더 보기</button><button type="button" class="feed-more" id="sellLess" hidden>접기</button></div></div>
     </section>
