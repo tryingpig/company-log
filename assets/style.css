@@ -325,3 +325,25 @@ h2.sec, #secChart { scroll-margin-top: 12px; }
 .fab-menu a { padding: 8px 12px; border-radius: 8px; font-size: 14px; color: var(--text-2); }
 .fab-menu a:hover { background: var(--bg); color: var(--text); }
 @media (prefers-reduced-motion: reduce) { .fab { transition: none; } }
+/* 목록: 정렬·필터 칩·날짜별 묶음 */
+.toolbar .tb-row { display: flex; gap: 10px; flex-wrap: wrap; width: 100%; }
+.toolbar .tb-row #q { flex: 1 1 240px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; width: 100%; }
+.chips .lab { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.chip { font: inherit; font-size: 13px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--text); color: var(--text); background: var(--bg); font-weight: 600; }
+.chip .n { font-size: 11px; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.chip:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.count { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+h2.day { font-size: 15px; margin: 20px 0 8px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+#groups > .panel:first-child { margin-top: 10px; }
+.list .nm .mk { font-weight: 400; font-size: 11px; color: var(--text-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 1px; }
+.list .rt { justify-self: end; display: flex; gap: 6px; align-items: center; }
+.list .flipc { font-size: 12px; font-weight: 700; color: var(--imp); background: var(--imp-bg); border-radius: 6px; padding: 0 7px; }
+.list .nums { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list .nums b { color: var(--text); font-weight: 600; }
+.list .nums .sorted { background: var(--bg); border-radius: 4px; padding: 0 4px; margin: 0 -4px; }
+.list a:hover .nums .sorted { background: var(--surface); }
+.more { display: block; width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text-2); cursor: pointer; }
+.list .nums b.pos { color: var(--up); } .list .nums b.neg { color: var(--down); }

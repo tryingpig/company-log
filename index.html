@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Company Log</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261020g">
+<link rel="stylesheet" href="assets/style.css?v=20261020i">
 </head>
 <body>
 <div class="wrap">
@@ -15,23 +15,49 @@
   </header>
 
   <div class="toolbar">
-    <input id="q" type="search" placeholder="종목명 또는 코드 검색" autocomplete="off">
-    <div class="seg" id="dirSeg">
-      <button data-v="all" class="on">전체</button>
-      <button data-v="up">최근 상향</button>
-      <button data-v="down">최근 하향</button>
+    <div class="tb-row">
+      <input id="q" type="search" placeholder="종목명 또는 코드 검색" autocomplete="off">
+      <div class="seg" role="group" aria-label="정렬" id="sortSeg">
+        <button type="button" data-v="recent" class="on" aria-pressed="true">최근 리포트</button>
+        <button type="button" data-v="gap" aria-pressed="false">목표가 괴리 큰 순</button>
+        <button type="button" data-v="rel" aria-pressed="false">시장 대비 강한 순</button>
+        <button type="button" data-v="cnt" aria-pressed="false">리포트 많은 순</button>
+      </div>
+    </div>
+    <div class="chips" id="chips">
+      <span class="lab">필터</span>
+      <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
+      <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
+      <button type="button" class="chip" data-f="flip" aria-pressed="false">⚠&#xFE0E; 의견 전환 있음</button>
+      <button type="button" class="chip" data-f="upw" aria-pressed="false">상향 우세</button>
+      <button type="button" class="chip" data-f="dnw" aria-pressed="false">하향 우세</button>
+      <button type="button" class="chip" data-f="week" aria-pressed="false">이번 주 리포트</button>
     </div>
   </div>
 
-  <div class="panel">
-    <ul class="list" id="list"></ul>
-  </div>
+  <p class="count" id="count"></p>
+  <div id="groups"></div>
+  <button type="button" class="more" id="more" hidden>더 보기</button>
 </div>
 
+<nav class="fab" aria-label="페이지 이동">
+  <button type="button" class="fab-btn" id="fabTop" title="맨 위로" aria-label="맨 위로">↑</button>
+</nav>
+
 <script>
-const fmt = n => n == null ? '-' : n.toLocaleString('ko-KR');
+const fmt = n => n == null ? '-' : Math.round(n).toLocaleString('ko-KR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let stocks = [], dir = 'all';
+const sg = v => (v >= 0 ? '+' : '') + v.toFixed(1);
+const MK = {KOSPI: '코스피', KOSDAQ: '코스닥'};
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const PAGE = 80;
+let stocks = [], sort = 'recent', on = new Set(), shown = PAGE, weekCut = '';
+
+const F = {
+  KOSPI: s => s.market === 'KOSPI', KOSDAQ: s => s.market === 'KOSDAQ', flip: s => s.flips3 > 0,
+  upw: s => s.up3 > s.down3, dnw: s => s.down3 > s.up3, week: s => s.last_date.slice(0, 10) > weekCut,
+};
+const KEY = {recent: s => s.last_date, gap: s => s.gap ?? -1e9, rel: s => s.rel3 ?? -1e9, cnt: s => s.up3 + s.down3};
 
 // AI 정리 상태: 날짜 / 대기
 function aiTxt(s) {
@@ -42,30 +68,96 @@ function aiTxt(s) {
   return `<span class="ai-st">AI 정리 ${esc((a.date || '').slice(5, 10))}${p}</span>`;
 }
 
-function render() {
-  const q = document.getElementById('q').value.trim().toLowerCase();
-  const rows = stocks.filter(s =>
-    (dir === 'all' || s.last_dir === dir) &&
-    (!q || s.name.toLowerCase().includes(q) || s.code.includes(q)));
-  document.getElementById('list').innerHTML = rows.length ? rows.map(s => `
-    <li><a href="stock.html?code=${s.code}">
-      <span class="nm">${esc(s.name)}<small>${s.code}</small></span>
-      <span class="cnt">리포트 ${s.count} · <span class="pos">▲${s.up}</span> <span class="neg">▼${s.down}</span>${aiTxt(s)}</span>
-      <span class="last"><span class="tag ${s.last_dir}">${s.last_dir === 'up' ? '상향' : '하향'}</span>
-        ${esc(s.last_date)} · ${esc(s.last_broker)} · 목표가 ${fmt(s.last_to)}원</span>
-    </a></li>`).join('') : '<li class="empty">검색 결과가 없어요</li>';
+function rowHtml(s) {
+  const hl = k => sort === k ? ' sorted' : '';
+  return `<li><a href="stock.html?code=${s.code}">
+    <span class="nm">${esc(s.name)}<small>${s.code}</small>${s.market ? `<span class="mk">${MK[s.market]}</span>` : ''}</span>
+    <span class="rt">${s.flips3 ? `<span class="flipc" title="최근 3개월 증권사 의견 전환">⚠&#xFE0E; 전환 ${s.flips3}</span>` : ''}${aiTxt(s)}</span>
+    <span class="last"><span class="tag ${s.last_dir}">${s.last_dir === 'up' ? '상향' : '하향'}</span>${esc(s.last_date.slice(5))} · ${esc(s.last_broker)} · 목표가 ${fmt(s.last_to)}원</span>
+    <span class="nums">
+      <span class="${hl('cnt')}">3개월 <span class="pos">▲${s.up3 ?? 0}</span> <span class="neg">▼${s.down3 ?? 0}</span> · 증권사 ${s.brokers3 ?? 0}곳</span>
+      ${s.wmean ? `<span class="${hl('gap')}">가중 목표가 <b>${fmt(s.wmean)}</b> <span class="${s.gap >= 0 ? 'pos' : 'neg'}">(${sg(s.gap)}%)</span></span>` : '<span>가중 목표가 -</span>'}
+      ${s.rel3 != null ? `<span class="${hl('rel')}">시장 대비 3개월 <b class="${s.rel3 >= 0 ? 'pos' : 'neg'}">${sg(s.rel3)}%p</b></span>` : ''}
+    </span>
+  </a></li>`;
 }
 
-document.getElementById('q').addEventListener('input', render);
-document.getElementById('dirSeg').addEventListener('click', e => {
+function dayHead(day, rows) {
+  const d = new Date(day + 'T00:00:00');
+  const up = rows.filter(s => s.last_dir === 'up').length;
+  return `<h2 class="day">${day.slice(5).replace('-', '.')} (${WD[d.getDay()]}) <span class="sub">${rows.length}종목 · 마지막 리포트 <span class="pos">상향 ${up}</span> · <span class="neg">하향 ${rows.length - up}</span></span></h2>`;
+}
+
+function render() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const match = s => !q || s.name.toLowerCase().includes(q) || s.code.includes(q);
+  const rows = stocks.filter(s => match(s) && [...on].every(f => F[f](s)));
+  rows.sort((a, b) => KEY[sort](b) > KEY[sort](a) ? 1 : KEY[sort](b) < KEY[sort](a) ? -1 : 0);
+  document.getElementById('count').textContent = `${rows.length}종목` + (on.size || q ? ` / 전체 ${stocks.length}` : '');
+  const page = rows.slice(0, shown);
+  const box = document.getElementById('groups');
+  if (!rows.length) box.innerHTML = '<div class="panel"><ul class="list"><li class="empty">조건에 맞는 종목이 없어요</li></ul></div>';
+  else if (sort === 'recent') {
+    // 최근 리포트 순일 때는 마지막 리포트 날짜별로 묶는다
+    const days = [];
+    page.forEach(s => {
+      const d = s.last_date.slice(0, 10);
+      if (!days.length || days[days.length - 1][0] !== d) days.push([d, []]);
+      days[days.length - 1][1].push(s);
+    });
+    const full = {};
+    rows.forEach(s => { const d = s.last_date.slice(0, 10); (full[d] ||= []).push(s); });
+    box.innerHTML = days.map(([d, rs]) => dayHead(d, full[d]) +
+      `<div class="panel"><ul class="list">${rs.map(rowHtml).join('')}</ul></div>`).join('');
+  } else {
+    box.innerHTML = `<div class="panel"><ul class="list">${page.map(rowHtml).join('')}</ul></div>`;
+  }
+  const more = document.getElementById('more');
+  more.hidden = rows.length <= shown;
+  more.textContent = `더 보기 (${rows.length - shown}종목 남음)`;
+  // 칩 옆 숫자: 지금 조건에서 그 칩까지 고르면 남는 종목 수
+  document.querySelectorAll('.chip').forEach(c => {
+    const n = stocks.filter(s => match(s) && [...on, c.dataset.f].every(k => F[k](s))).length;
+    let el = c.querySelector('.n');
+    if (!el) { el = document.createElement('span'); el.className = 'n'; c.append(el); }
+    el.textContent = n;
+  });
+}
+
+document.getElementById('q').addEventListener('input', () => { shown = PAGE; render(); });
+document.getElementById('sortSeg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  dir = b.dataset.v;
-  document.querySelectorAll('#dirSeg button').forEach(x => x.classList.toggle('on', x === b));
+  sort = b.dataset.v; shown = PAGE;
+  document.querySelectorAll('#sortSeg button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
   render();
 });
+document.getElementById('chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (!c) return;
+  const f = c.dataset.f;
+  if (on.has(f)) on.delete(f);
+  else {
+    on.add(f);
+    const pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', upw: 'dnw', dnw: 'upw'}[f];   // 서로 겹치지 않는 쌍
+    if (pair) on.delete(pair);
+  }
+  document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', on.has(x.dataset.f)));
+  shown = PAGE; render();
+});
+document.getElementById('more').onclick = () => { shown += PAGE; render(); };
+
+(() => {
+  const fab = document.querySelector('.fab');
+  const smooth = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  document.getElementById('fabTop').onclick = () => window.scrollTo({top: 0, behavior: smooth});
+  const onScroll = () => fab.classList.toggle('show', window.scrollY > 300);
+  addEventListener('scroll', onScroll, {passive: true}); onScroll();
+})();
 
 fetch('data/index.json', {cache: 'no-cache'}).then(r => r.json()).then(d => {
   stocks = d.stocks;
+  const last = stocks.reduce((m, s) => s.last_date > m ? s.last_date : m, '');
+  const w = new Date(last.slice(0, 10) + 'T00:00:00'); w.setDate(w.getDate() - 7);
+  weekCut = w.toISOString().slice(0, 10);
   document.getElementById('updated').textContent = `${stocks.length}종목 · 갱신 ${d.updated}`;
   render();
 });

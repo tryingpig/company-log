@@ -300,6 +300,17 @@ def main():
         else:
             print(f"지수 수집 실패: {[m for m, v in got.items() if not v]} (기존 market.json 유지)")
     uni = json.loads(UNIVERSE.read_text(encoding="utf-8")) if UNIVERSE.exists() else {}
+    mdata = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
+    mclose = {m: {x["d"]: x["c"] for x in mdata.get(m, [])} for m in MARKETS}
+
+    def rel3(bars, market):
+        """최근 63거래일 종목 수익률 − 지수 수익률(%p). 목록 정렬·표시용."""
+        mc = mclose.get(market) or {}
+        rows = [b for b in bars if b["d"] in mc]
+        if len(rows) < 64:
+            return None
+        a, b = rows[-1], rows[-64]
+        return round(((a["c"] / b["c"]) - (mc[a["d"]] / mc[b["d"]])) * 100, 1)
 
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     index = []
@@ -327,7 +338,15 @@ def main():
                       "down": sum(r["dir"] == "down" for r in reps),
                       "last_date": last["date"], "last_dir": last["dir"],
                       "last_broker": last["broker"], "last_to": last["to"],
-                      "win_count": sum(r["win"] for r in reps)})
+                      "win_count": sum(r["win"] for r in reps),
+                      # 목록 정렬·필터용 (최근 3개월 기준)
+                      "market": market,
+                      "up3": sum(r["win"] and r["dir"] == "up" for r in reps),
+                      "down3": sum(r["win"] and r["dir"] == "down" for r in reps),
+                      "flips3": sum(len(b["flips"]) for b in brokers),
+                      "brokers3": len(brokers),
+                      "wmean": (consensus or {}).get("wmean"), "gap": (consensus or {}).get("gap_wmean"),
+                      "rel3": rel3(bars, market)})
     index.sort(key=lambda x: x["last_date"], reverse=True)
     (DATA / "index.json").write_text(json.dumps({"updated": now, "stocks": index},
                                                 ensure_ascii=False, separators=(",", ":")),
