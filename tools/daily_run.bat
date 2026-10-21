@@ -1,5 +1,5 @@
 @echo off
-rem company-log daily update (scheduler: CompanyLogDaily, weekdays 10:00, 15:40, 20:00)
+rem company-log daily update (scheduler: CompanyLogDaily, weekdays 10:00, 15:40, 20:05)
 cd /d C:\ClaudeCode\company-log
 set PYTHONUTF8=1
 if not exist logs mkdir logs

@@ -468,11 +468,11 @@ function updateLegend(p) {
 function aiPendingNote() {
   const a = analysis;
   const win = data.reports.filter(r => r.win).length;
-  if (!a) return win >= 3 ? `<div class="pending">AI 정리 대기 중 — 아직 첫 정리 전이에요. 평일 10시·15시40분·20시에 순서대로 채워져요</div>` : '';
+  if (!a) return win >= 3 ? `<div class="pending">AI 정리 대기 중 — 아직 첫 정리 전이에요. 평일 10시·15시40분·20시5분에 순서대로 채워져요</div>` : '';
   const parts = [];
   if (a.pending) parts.push(`새 리포트 ${a.pending}건 미반영`);
   if (a.needs_summary) parts.push('의견 정리 갱신 전');
-  return parts.length ? `<div class="pending">AI 정리 대기 중 · ${parts.join(' · ')} (평일 10시·15시40분·20시 처리)</div>` : '';
+  return parts.length ? `<div class="pending">AI 정리 대기 중 · ${parts.join(' · ')} (평일 10시·15시40분·20시5분 처리)</div>` : '';
 }
 
 const pctTxt = g => g == null ? '-' : `${g > 0 ? '+' : ''}${g.toFixed(1)}%`;
