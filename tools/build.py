@@ -403,6 +403,9 @@ def main():
         path = STOCKS / f"{code}.json"
         old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         bars = prices.get(code) or old.get("prices", [])   # 수집 실패 시 기존 값 유지
+        for b_ in bars:                                      # 거래정지일: 네이버가 시가·고가·저가를 0으로 준다 → 종가로 채움
+            if not (b_["o"] and b_["h"] and b_["l"]):
+                b_["o"] = b_["h"] = b_["l"] = b_["c"]
         reps = sorted(v["reports"], key=lambda r: r["id"], reverse=True)
         v["name"] = reps[0]["name"]                          # 사명이 바뀌었으면 최근 이름으로
         if v["name"] in ALIAS_NAMES:                         # 옛 이름 리포트뿐이면 지금 상장 이름으로
