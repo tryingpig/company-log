@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261027b">
+<link rel="stylesheet" href="assets/style.css?v=20261028a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -30,7 +30,28 @@
     <button type="button" role="tab" id="tab-list" aria-controls="pane-list" aria-selected="true" data-tab="list">종목 목록</button>
     <button type="button" role="tab" id="tab-flips" aria-controls="pane-flips" aria-selected="false" data-tab="flips">의견 전환 <span class="tn" id="tnFlips"></span></button>
     <button type="button" role="tab" id="tab-signals" aria-controls="pane-signals" aria-selected="false" data-tab="signals">거래량 신호 <span class="tn" id="tnSig" title="매수 우위"></span><span class="tn sell" id="tnSell" title="매도 우위"></span></button>
+    <button type="button" role="tab" id="tab-earn" aria-controls="pane-earn" aria-selected="false" data-tab="earn">실적 캘린더 <span class="tn" id="tnEarn" title="오늘 발표"></span></button>
   </nav>
+
+  <div role="tabpanel" id="pane-earn" aria-labelledby="tab-earn" hidden>
+    <section class="feed" aria-labelledby="earnHead">
+      <h2 class="feed-h" id="earnHead">실적 캘린더 <span class="sub" id="earnSub"></span></h2>
+      <details class="sig-rule">
+        <summary class="rl-h">어떤 일정이고 무엇을 보여주나요</summary>
+        <ol class="rl">
+          <li><b>일정</b>: 스탁이지 실적발표 캘린더 (DART 결산실적공시 예고·잠정실적 공시 기준)</li>
+          <li><b>이번 분기 추정치</b>: 네이버 증권 컨센서스(억원). 발표 전 값을 매일 기록해 두고, 기록 시작 뒤 추정치가 바뀌면 함께 표시해요</li>
+          <li><b>주가 흐름</b>: 1주·1개월 시장 대비, 20일선, 매수·매도 에지, 최근 5거래일 거래량 신호 — 거래량 신호 탭과 같은 기준</li>
+          <li><b>지난 5분기 실적</b>: 네이버 증권 분기 실적</li>
+          <li><b>발표 후</b>: 스탁이지 잠정 실적과 예상 대비(시총 5,000억 이상만), 발표일·다음 날 등락</li>
+        </ol>
+        <p class="rl-n">「리포트」 표시는 company-log에 증권사 리포트가 있는 종목이에요. 눌러서 종목 페이지로 갈 수 있어요.</p>
+      </details>
+      <div class="feed-btns earn-prev" id="earnPrevBox" hidden><button type="button" class="feed-more" id="earnPrev">지난 주 보기</button></div>
+      <div id="earnList"></div>
+      <div class="feed-btns earn-next" id="earnNextBox" hidden><button type="button" class="feed-more" id="earnNext">다음 주 더 보기</button></div>
+    </section>
+  </div>
 
   <div role="tabpanel" id="pane-flips" aria-labelledby="tab-flips" hidden>
   <section class="feed" id="feedBox" aria-labelledby="feedHead">
@@ -286,11 +307,12 @@ function edgeBadge(s) {
                    : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 네 선 모두 하락">▼ 매도 에지 ${e.run}일째</span>`;
 }
 
-// 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 (주소 끝 #flips · #signals 로 바로 열기)
+// 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 / 실적 캘린더 (주소 끝 #flips · #signals · #earn 으로 바로 열기)
+const TABS = ['list', 'flips', 'signals', 'earn'];
 function showTab(t) {
-  if (!['list', 'flips', 'signals'].includes(t)) t = 'list';
+  if (!TABS.includes(t)) t = 'list';
   document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
-  ['list', 'flips', 'signals'].forEach(k => { document.getElementById('pane-' + k).hidden = k !== t; });
+  TABS.forEach(k => { document.getElementById('pane-' + k).hidden = k !== t; });
   const h = t === 'list' ? '' : '#' + t;
   if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
 }
@@ -366,6 +388,92 @@ document.getElementById('sigSeg').addEventListener('click', e => {
   document.getElementById('buyBox').hidden = b.dataset.v !== 'buy';
   document.getElementById('sellBox').hidden = b.dataset.v !== 'sell';
 });
+
+// 실적 캘린더 (data/earnings.json — tools/earnings.py, 사용자 요청 10-28)
+// 처음엔 이번 주+다음 주, 위 버튼으로 지난 주를 한 주씩, 아래 버튼으로 그다음 주를 한 주씩
+const eok = v => { if (v == null) return '-'; const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 10000) { const j = Math.floor(a / 10000), r = Math.round(a % 10000); return `${s}${j}조${r ? ' ' + r.toLocaleString('ko-KR') + '억' : ''}`; }
+  return `${s}${Math.round(a).toLocaleString('ko-KR')}억`; };
+const pc = (v, u = '%') => v == null || Number.isNaN(v) ? '<span class="mut">-</span>'
+  : typeof v === 'string' ? `<b class="${/흑자|축소/.test(v) ? 'pos' : 'neg'}">${v}</b>`      // 적자가 끼면 말로 (earnings.py growth)
+  : `<b class="${v >= 0 ? 'pos' : 'neg'}">${sg(v)}${u}</b>`;
+let earn = [], earnFrom = -0, earnTo = 1;              // 이번 주 = 0, 지난주 = -1, 다음 주 = 1
+function earnCard(x) {
+  const today = ymd(new Date()), done = x.date <= today, r = x.result, e = x.est, p = x.price || {};
+  const q = x.period.slice(2).replace('.', '.');
+  let pill;
+  if (r) pill = `<span class="ep ${r.surprise == null ? '' : r.surprise >= 0 ? 'up' : 'dn'}">${esc(r.headline || '잠정 실적 발표')}</span>`;
+  else if (done && x.date < today) pill = '<span class="ep mut">발표 후 · 잠정 실적은 시총 5,000억 이상만</span>';
+  else if (e) pill = `<span class="ep">추정 영업익 ${eok(e.op)} <small>전년 대비 ${e.yoy.op == null ? '-' : typeof e.yoy.op === 'string' ? e.yoy.op : sg(e.yoy.op) + '%'}</small></span>`;
+  else pill = '<span class="ep mut">추정치 없음</span>';
+  const M = {rev: ['revenue', '매출'], op: ['operating_profit', '영업익'], net: ['net_profit', '순이익']};
+  const estRows = Object.entries(M).map(([k, [rk, lab]]) => {
+    const rm = r?.m?.[rk], num = s => { if (s == null || s === '') return null; const f = parseFloat(String(s).replace('%', '')); return Number.isNaN(f) ? String(s) : f; };
+    // 발표 뒤엔 전년·전분기 대비를 실제(잠정) 실적 기준으로
+    return r ? `<tr><th>${lab}</th><td>${e ? eok(e[k]) : '-'}</td><td>${rm?.value ? esc(rm.value) : '-'}</td><td>${pc(rm?.vs_estimate_pct)}</td><td>${pc(num(rm?.yoy))}</td><td>${pc(num(rm?.qoq))}</td></tr>`
+      : `<tr><th>${lab}</th><td>${e ? eok(e[k]) : '-'}</td><td>${e ? pc(e.yoy[k]) : '-'}</td><td>${e ? pc(e.qoq[k]) : '-'}</td></tr>`;
+  }).join('');
+  const chips = [];
+  if (p.x1w != null) chips.push(`<span class="ec">1주 시장 대비 ${pc(p.x1w, '%p')}</span>`);
+  if (p.x1m != null) chips.push(`<span class="ec">1개월 시장 대비 ${pc(p.x1m, '%p')}</span>`);
+  if (p.ma20 != null) chips.push(`<span class="ec">${p.ma20 ? '20일선 위' : '20일선 아래'}</span>`);
+  if (p.edge) chips.push(edgeBadge({edge: p.edge}));
+  if (p.sig) chips.push(`<span class="sigc">● 거래량 신호 ${p.sig.d.slice(5).replace('-', '.')} · ${p.sig.volx}배</span>`);
+  if (p.sell) chips.push(`<span class="sellc">▼ 매도 우위 ${p.sell.d.slice(5).replace('-', '.')} · ${p.sell.volx}배</span>`);
+  const react = p.react ? `<p class="er">발표일 ${pc(p.react.d0)} · 다음 날 ${p.react.d1 == null ? '<span class="mut">아직</span>' : pc(p.react.d1)}</p>` : '';
+  const past = (x.past || []).length ? `<table class="et et-past"><thead><tr><th>분기</th><th>매출</th><th>영업익</th><th>순이익</th><th>영업이익률</th></tr></thead><tbody>
+    ${e ? `<tr class="est"><th>${q} 추정</th><td>${eok(e.rev)}</td><td>${eok(e.op)}</td><td>${eok(e.net)}</td><td>${e.opm == null ? '-' : e.opm.toFixed(1) + '%'}</td></tr>` : ''}
+    ${x.past.map(f => `<tr><th>${f.p.slice(2)}</th><td>${eok(f.rev)}</td><td>${eok(f.op)}</td><td>${eok(f.net)}</td><td>${f.opm == null ? '-' : f.opm.toFixed(1) + '%'}</td></tr>`).join('')}
+    </tbody></table>` : '<p class="mut">분기 실적 없음</p>';
+  const chg = e?.chg ? `<p class="en">기록 시작(${e.chg.since.slice(5).replace('-', '.')}) 뒤 추정치 변화 · 매출 ${pc(e.chg.rev)} · 영업익 ${pc(e.chg.op)} · 순이익 ${pc(e.chg.net)}</p>` : '';
+  const links = [x.inlog ? `<a href="stock.html?code=${x.code}">company-log 종목 페이지 →</a>` : '',
+    r?.rcept ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept}" target="_blank" rel="noopener">잠정실적 공시 원문 ↗</a>` : '',
+    `<a href="https://m.stock.naver.com/domestic/stock/${x.code}/finance/quarter" target="_blank" rel="noopener">네이버 분기 실적 ↗</a>`].filter(Boolean).join('');
+  return `<li><details class="ecard"><summary>
+      <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
+      <span class="eq">${q}</span>${pill}</summary>
+    <div class="eb">
+      <h3>${r ? '잠정 실적' : '이번 분기 추정치'} <small>${e ? `추정치는 네이버 컨센서스 · ${e.d.slice(5).replace('-', '.')} 기록` : ''}</small></h3>
+      <div class="sc-tw"><table class="et"><thead><tr><th></th>${r ? '<th>추정치</th><th>잠정 실적</th><th>예상 대비</th><th>전년 대비</th><th>전분기 대비</th>' : '<th>추정치</th><th>전년 대비</th><th>전분기 대비</th>'}</tr></thead><tbody>${estRows}</tbody></table></div>
+      ${r ? '<p class="en">잠정 실적·예상 대비·전년/전분기 대비는 스탁이지 기준이에요(스탁이지 예상치는 네이버 추정치와 다를 수 있어요)</p>' : ''}${chg}
+      <h3>주가 흐름 <small>${p.d ? p.d.slice(5).replace('-', '.') + ' 종가 기준' : ''}</small></h3>
+      <div class="ecs">${chips.join('') || '<span class="mut">주가 없음</span>'}</div>${react}
+      <h3>지난 5분기 실적</h3>
+      <div class="sc-tw">${past}</div>
+      <p class="el">${links}</p>
+    </div></details></li>`;
+}
+function renderEarn() {
+  const box = document.getElementById('earnList');
+  const wk = d => wkAgo(d) * -1;                        // 이번 주 0, 다음 주 1, 지난주 -1
+  const all = earn.map(x => ({...x, w: wk(x.date)}));
+  const rows = all.filter(x => x.w >= earnFrom && x.w <= earnTo);
+  let html = '', day = '', w = null;
+  rows.forEach(x => {
+    if (x.w !== w) { w = x.w; const s = new Date(THIS_MON.getTime() + w * WEEK), e2 = new Date(s); e2.setDate(e2.getDate() + 6);
+      html += `${html ? '</ol></div>' : ''}<h3 class="ew">${w === 0 ? '이번 주' : w === 1 ? '다음 주' : w === -1 ? '지난주' : w > 0 ? `${w}주 뒤` : `${-w}주 전`} <span>${mdd(s)}~${mdd(e2)} · ${all.filter(y => y.w === w).length}종목</span></h3><div class="panel"><ol class="feed-list earn-list">`; day = ''; }
+    if (x.date !== day) { day = x.date; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})${day === ymd(new Date()) ? ' · 오늘' : ''}</li>`; }
+    html += earnCard(x);
+  });
+  box.innerHTML = html ? html + '</ol></div>' : '<div class="panel"><p class="empty">이 기간에 잡힌 실적 발표 일정이 없어요</p></div>';
+  const minW = Math.min(...all.map(x => x.w)), maxW = Math.max(...all.map(x => x.w));
+  document.getElementById('earnPrevBox').hidden = !(all.length && minW < earnFrom);
+  document.getElementById('earnNextBox').hidden = !(all.length && maxW > earnTo);
+  const pw = all.filter(x => x.w === earnFrom - 1).length, nw = all.filter(x => x.w === earnTo + 1).length;
+  document.getElementById('earnPrev').textContent = `지난 주 보기${pw ? ` · ${pw}종목` : ''}`;
+  document.getElementById('earnNext').textContent = `다음 주 더 보기${nw ? ` · ${nw}종목` : ''}`;
+}
+document.getElementById('earnPrev').onclick = () => { earnFrom--; renderEarn(); };
+document.getElementById('earnNext').onclick = () => { earnTo++; renderEarn(); };
+fetch('data/earnings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
+  if (!d) return;
+  earn = d.items;
+  const today = ymd(new Date());
+  document.getElementById('earnSub').textContent = `스탁이지 실적발표 일정 · ${earn.length}종목 · 갱신 ${d.updated}`;
+  const n = earn.filter(x => x.date === today).length;
+  document.getElementById('tnEarn').textContent = n ? n : '';
+  renderEarn();
+}).catch(() => {});
 
 // 신호 뒤 결과: 신호일 종가 → 최근 종가 (사용자 요청 10-27)
 function afterCell(f) {

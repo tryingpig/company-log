@@ -83,6 +83,26 @@ async def pusher(stop):
                 log(f"중간 push 실패: {e}")
 
 
+def run_earnings():
+    """실적 캘린더(earnings.py). 실패해도 나머지는 계속 — 문제 문장만 돌려준다."""
+    log("실적 캘린더 시작")
+    try:
+        r = subprocess.run([PY39, str(ROOT / "tools" / "earnings.py")], cwd=ROOT, capture_output=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        return "실적 캘린더 30분 넘게 걸려 중단 (기존 화면 유지)"
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace")
+    for ln in out.strip().splitlines()[-4:]:
+        log(f"  earnings | {ln}")
+    if r.returncode == 3:
+        return ("실적 캘린더: 스탁이지 로그인 세션 만료 (기존 화면 유지) — 크롬에서 스탁이지 로그인 후 "
+                "_api-maps\\stockeasy_session_import.py 로 세션 다시 저장")
+    if r.returncode == 2:
+        return "실적 캘린더: 일부 종목 재무 수집 실패 — " + (out.strip().splitlines() or [""])[-1][:200]
+    if r.returncode:
+        return f"실적 캘린더 실패 (exit {r.returncode}) — " + (out.strip().splitlines() or [""])[-1][:200]
+    return None
+
+
 async def main_async():
     t0 = time.time()
     log("build 시작")
@@ -92,6 +112,7 @@ async def main_async():
         log(f"  build | {ln}")
     if r.returncode:
         raise RuntimeError(f"build.py 실패 (exit {r.returncode})")
+    earn_problem = run_earnings()
     push("데이터 빌드")
 
     codes = an.targets(MIN_REPORTS)
@@ -107,7 +128,7 @@ async def main_async():
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")
-    problems = []
+    problems = [earn_problem] if earn_problem else []
     if st["stopped"]:
         problems.append(f"{MAX_HOURS}시간 안에 못 끝내고 멈춤 (다음 실행이 이어 감)")
     if st["summary_fail"]:

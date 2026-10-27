@@ -473,6 +473,47 @@ details.sig-rule > summary::before, details.sc-card > summary::before { content:
 details[open].sig-rule > summary::before, details[open].sc-card > summary::before { transform: rotate(90deg); }
 details.sig-rule:not([open]) > summary, details.sc-card:not([open]) > summary { margin-bottom: 0; }
 details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* 실적 캘린더 (10-28) */
+.ew { font-size: 14px; margin: 16px 0 6px; display: flex; gap: 8px; align-items: baseline; }
+.ew span { font-size: 12px; font-weight: 400; color: var(--muted); }
+.earn-prev, .earn-next { border: 1px solid var(--line); border-radius: 12px; margin: 10px 0 0; background: var(--surface); }
+.earn-list .ecard > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(8em, 1fr) auto auto; gap: 4px 12px;
+  align-items: center; padding: 10px 16px 10px 32px; position: relative; font-size: 14px; }
+.earn-list .ecard > summary::-webkit-details-marker { display: none; }
+.earn-list .ecard > summary::before { content: ''; position: absolute; left: 14px; top: 50%; margin-top: -5px;
+  border: 5px solid transparent; border-left: 6px solid var(--muted); border-right: 0; transition: transform .15s; }
+.earn-list .ecard[open] > summary::before { transform: rotate(90deg); }
+.earn-list .ecard > summary:hover { background: var(--bg); }
+.earn-list .ecard > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.earn-list .mk { font-weight: 400; font-size: 11px; color: var(--text-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+.earn-list .mk.rp { color: var(--accent); border-color: var(--accent); }
+.earn-list .eq { font-size: 12px; color: var(--muted); }
+.earn-list .ep { justify-self: end; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 8px; background: var(--bg); color: var(--text-2); text-align: right; }
+.earn-list .ep small { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.earn-list .ep.up { color: var(--up); background: var(--up-bg); } .earn-list .ep.dn { color: var(--down); background: var(--down-bg); }
+.earn-list .ep.mut { font-weight: 400; color: var(--muted); }
+.earn-list .eb { padding: 4px 16px 14px 32px; font-size: 13px; }
+.earn-list .eb h3 { font-size: 13px; margin: 12px 0 6px; color: var(--text); }
+.earn-list .eb h3 small { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.et { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 100%; }
+.et th, .et td { padding: 5px 10px; text-align: right; border-top: 1px solid var(--line); white-space: nowrap; }
+.et thead th { border-top: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.et tbody th { text-align: left; font-weight: 600; }
+.et b.pos { color: var(--up); } .et b.neg { color: var(--down); }
+.et tr.est th, .et tr.est td { background: var(--sig-bg); color: var(--sig); font-weight: 600; }
+.earn-list .mut, .et .mut { color: var(--muted); }
+.earn-list .en { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.earn-list .en b.pos, .earn-list .er b.pos, .ecs b.pos { color: var(--up); } .earn-list .en b.neg, .earn-list .er b.neg, .ecs b.neg { color: var(--down); }
+.ecs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ecs .ec { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; color: var(--text-2); }
+.earn-list .er { margin: 8px 0 0; font-size: 13px; }
+.earn-list .el { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.earn-list .el a { color: var(--accent); }
+@media (max-width: 600px) {
+  .earn-list .ecard > summary { grid-template-columns: 1fr auto; }
+  .earn-list .ep { grid-column: 1 / -1; justify-self: start; text-align: left; }
+  .earn-list .eb { padding-left: 16px; }
+}
 /* 매수·매도 에지 */
 .edgec { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 0 7px; white-space: nowrap; border: 1px solid; }
 .edgec.up { color: var(--up); background: var(--up-bg); border-color: var(--up); }

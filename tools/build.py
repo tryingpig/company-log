@@ -266,6 +266,77 @@ def summarize_brokers(reps, close):
     return brokers, consensus
 
 
+# ── 거래량 신호·에지 (earnings.py 도 같이 쓴다) ──────────────────────────────
+
+def strength_signals_mc(bars, mc):
+    """강도·거래량 신호(사용자 정의 조건, 2026-10-20): 그날
+      ① 상대강도(종가 ÷ 지수)가 직전 20거래일 최고치를 넘고
+      ② 거래량이 평소(그날 뺀 직전 20거래일 평균)의 2배 이상이고
+      ③ 종가가 20일 이동평균 위
+      ④ 양봉(종가 > 시가)이고 전일 종가보다 상승 — 음봉 대량 거래는 매도 우위라 제외(사용자 결정 2026-10-21).
+    nth = 직전 20거래일 안 신호 수 + 1 (1이면 첫 신호). mc = 지수 종가 {날짜: 값}."""
+    rows = [b for b in bars if b["d"] in mc]
+    rs = [b["c"] / mc[b["d"]] for b in rows]
+    out, idx = [], []
+    for i in range(21, len(rows)):
+        va = sum(b["v"] for b in rows[i - 20:i]) / 20
+        ma = sum(b["c"] for b in rows[i - 19:i + 1]) / 20
+        if (va and rs[i] > max(rs[i - 20:i]) and rows[i]["v"] / va >= 2 and rows[i]["c"] > ma
+                and rows[i]["c"] > rows[i]["o"] and rows[i]["c"] > rows[i - 1]["c"]):
+            nth = sum(1 for j in idx if i - 20 <= j < i) + 1
+            idx.append(i)
+            out.append({"d": rows[i]["d"], "volx": round(rows[i]["v"] / va, 1), "nth": nth,
+                        "chg": round((rows[i]["c"] / rows[i - 1]["c"] - 1) * 100, 1)})
+    return out
+
+
+def sell_signals(bars):
+    """매도 우위 대량 거래(사용자 정의, 2026-10-21): 음봉(종가 < 시가) + 거래량 평소(직전 20거래일 평균)의 2배 이상.
+    trend = 전일 종가가 20일선 위였는지(상승 추세 중에 나온 매도 우위인지)."""
+    out = []
+    for i in range(21, len(bars)):
+        b = bars[i]
+        va = sum(x["v"] for x in bars[i - 20:i]) / 20
+        if va and b["c"] < b["o"] and b["v"] / va >= 2:
+            ma_prev = sum(x["c"] for x in bars[i - 20:i]) / 20
+            out.append({"d": b["d"], "volx": round(b["v"] / va, 1),
+                        "chg": round((b["c"] / bars[i - 1]["c"] - 1) * 100, 1),
+                        "trend": bars[i - 1]["c"] > ma_prev})
+    return out
+
+
+def edge_states(bars):
+    """매수·매도 에지(사용자 정의, 2026-10-21) — 날짜마다 1 / -1 / 0. 모두 AND.
+      매수: 5일선·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승
+      매도: 5일선·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 네 선 모두 전일보다 하락"""
+    c = [b["c"] for b in bars]
+    out = []
+    for i in range(len(c)):
+        if i < 60:
+            out.append(0)
+            continue
+        m = {n: sum(c[i - n + 1:i + 1]) / n for n in (5, 10, 20, 60)}
+        p = {n: sum(c[i - n:i]) / n for n in (5, 10, 20, 60)}
+        if min(m[5], m[10]) > m[20] > m[60] and all(m[n] > p[n] for n in m):
+            out.append(1)
+        elif max(m[5], m[10]) < m[20] < m[60] and all(m[n] < p[n] for n in m):
+            out.append(-1)
+        else:
+            out.append(0)
+    return out
+
+
+def edge_now(states, bars):
+    cur = states[-1] if states else 0
+    run = 0
+    for v in reversed(states):
+        if cur and v == cur:
+            run += 1
+        else:
+            break
+    return {"s": cur, "run": run, "since": bars[len(bars) - run]["d"]} if cur else None
+
+
 def write_signal_stats(slog, base, dates, now):
     """신호 기록 저장 + 성적표(signal_stats.json): 묶음별 h거래일 뒤 평균·시장 대비·시장 이긴 비율,
     추세 = 날짜마다 '그날까지 결과가 나온 최근 TREND_SIG거래일 신호'의 시장 이긴 비율·평균 수익률."""
@@ -362,70 +433,7 @@ def main():
     mclose = {m: {x["d"]: x["c"] for x in mdata.get(m, [])} for m in MARKETS}
 
     def strength_signals(bars, market):
-        """강도·거래량 신호(사용자 정의 조건, 2026-10-20): 그날
-          ① 상대강도(종가 ÷ 지수)가 직전 20거래일 최고치를 넘고
-          ② 거래량이 평소(그날 뺀 직전 20거래일 평균)의 2배 이상이고
-          ③ 종가가 20일 이동평균 위
-          ④ 양봉(종가 > 시가)이고 전일 종가보다 상승 — 음봉 대량 거래는 매도 우위라 제외(사용자 결정 2026-10-21).
-        nth = 직전 20거래일 안 신호 수 + 1 (1이면 첫 신호)."""
-        mc = mclose.get(market) or {}
-        rows = [b for b in bars if b["d"] in mc]
-        rs = [b["c"] / mc[b["d"]] for b in rows]
-        out, idx = [], []
-        for i in range(21, len(rows)):
-            va = sum(b["v"] for b in rows[i - 20:i]) / 20
-            ma = sum(b["c"] for b in rows[i - 19:i + 1]) / 20
-            if (va and rs[i] > max(rs[i - 20:i]) and rows[i]["v"] / va >= 2 and rows[i]["c"] > ma
-                    and rows[i]["c"] > rows[i]["o"] and rows[i]["c"] > rows[i - 1]["c"]):
-                nth = sum(1 for j in idx if i - 20 <= j < i) + 1
-                idx.append(i)
-                out.append({"d": rows[i]["d"], "volx": round(rows[i]["v"] / va, 1), "nth": nth,
-                            "chg": round((rows[i]["c"] / rows[i - 1]["c"] - 1) * 100, 1)})
-        return out
-
-    def sell_signals(bars):
-        """매도 우위 대량 거래(사용자 정의, 2026-10-21): 음봉(종가 < 시가) + 거래량 평소(직전 20거래일 평균)의 2배 이상.
-        trend = 전일 종가가 20일선 위였는지(상승 추세 중에 나온 매도 우위인지)."""
-        out = []
-        for i in range(21, len(bars)):
-            b = bars[i]
-            va = sum(x["v"] for x in bars[i - 20:i]) / 20
-            if va and b["c"] < b["o"] and b["v"] / va >= 2:
-                ma_prev = sum(x["c"] for x in bars[i - 20:i]) / 20
-                out.append({"d": b["d"], "volx": round(b["v"] / va, 1),
-                            "chg": round((b["c"] / bars[i - 1]["c"] - 1) * 100, 1),
-                            "trend": bars[i - 1]["c"] > ma_prev})
-        return out
-
-    def edge_states(bars):
-        """매수·매도 에지(사용자 정의, 2026-10-21) — 날짜마다 1 / -1 / 0. 모두 AND.
-          매수: 5일선·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승
-          매도: 5일선·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 네 선 모두 전일보다 하락"""
-        c = [b["c"] for b in bars]
-        out = []
-        for i in range(len(c)):
-            if i < 60:
-                out.append(0)
-                continue
-            m = {n: sum(c[i - n + 1:i + 1]) / n for n in (5, 10, 20, 60)}
-            p = {n: sum(c[i - n:i]) / n for n in (5, 10, 20, 60)}
-            if min(m[5], m[10]) > m[20] > m[60] and all(m[n] > p[n] for n in m):
-                out.append(1)
-            elif max(m[5], m[10]) < m[20] < m[60] and all(m[n] < p[n] for n in m):
-                out.append(-1)
-            else:
-                out.append(0)
-        return out
-
-    def edge_now(states, bars):
-        cur = states[-1] if states else 0
-        run = 0
-        for v in reversed(states):
-            if cur and v == cur:
-                run += 1
-            else:
-                break
-        return {"s": cur, "run": run, "since": bars[len(bars) - run]["d"]} if cur else None
+        return strength_signals_mc(bars, mclose.get(market) or {})
 
     def pct(a, b):
         return round((a / b - 1) * 100, 1)
