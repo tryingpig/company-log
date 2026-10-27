@@ -28,6 +28,7 @@ RAW_DUMP = ROOT / "raw" / "epic_messages.json"
 RAW_LIVE = ROOT / "raw" / "epic_live.jsonl"
 DATA = ROOT / "data"
 STOCKS = DATA / "stocks"
+SIGNAL_LOG = DATA / "signal_log.json"     # 거래량 신호 + 신호 뒤 결과 누적 기록 (지우지 않음)
 NAMES = DATA / "_names.json"          # 종목명 → 코드 캐시 (못 찾은 것은 null)
 UNIVERSE = Path(r"C:\ClaudeCode\EpicAI-Monitor\_universe.json")
 ALIASES = Path(__file__).with_name("aliases.json")
@@ -189,8 +190,12 @@ def fetch_bars(code):
 # ── 증권사별 집계 (코드 계산 — 로그에 적힌 목표가만 쓴다) ──────────────────────
 
 WINDOW_DAYS = 92     # 통합 목표가·증권사별 의견·AI 정리는 최근 3개월 리포트만 쓴다 (차트·로그 카드는 6개월)
-FEED_DAYS = 14       # 목록 맨 위 '최근 의견 전환' 칸에 보여줄 기간
-SIG_TDAYS = 5        # '강도·거래량 신호' 탭에 보여줄 최근 거래일 수
+FEED_DAYS = 31       # '의견 전환'·'거래량 신호' 탭에 담는 기간 (화면은 이번 주+지난주 펼침, 이전은 주 단위 더 보기)
+FLIP_BADGE_DAYS = 14 # 목록 종목 줄 '⚠ 최근 2주 전환' 배지·칩 기간
+SIG_TDAYS = 5        # 목록 종목 줄 '● 신호'·'▼ 매도 우위' 배지·칩 기간 (최근 거래일 수)
+AFTER_H = (5, 10, 20)  # 신호 성적표: 신호 뒤 몇 거래일 결과를 보나
+TREND_SIG = 20       # 성적표 추세 차트: 결과가 나온 최근 20거래일 동안의 신호로 한 점
+TREND_MIN = 8        # 신호가 이보다 적은 날은 점을 찍지 않는다
 FLIP_DAYS = 183      # 전환(같은 증권사 상향↔하향)은 직전 리포트를 6개월까지 거슬러 찾는다 (2026-10-20 사용자 결정)
 
 
@@ -259,6 +264,57 @@ def summarize_brokers(reps, close):
                      "up": sum(1 for b in brokers if b["last_dir"] == "up"),
                      "days": WINDOW_DAYS}
     return brokers, consensus
+
+
+def write_signal_stats(slog, base, dates, now):
+    """신호 기록 저장 + 성적표(signal_stats.json): 묶음별 h거래일 뒤 평균·시장 대비·시장 이긴 비율,
+    추세 = 날짜마다 '그날까지 결과가 나온 최근 TREND_SIG거래일 신호'의 시장 이긴 비율·평균 수익률."""
+    rows = sorted(slog.values(), key=lambda r: (r["d"], r["k"], r["code"]))
+    SIGNAL_LOG.write_text(json.dumps({"updated": now, "rows": rows}, ensure_ascii=False, separators=(",", ":")),
+                          encoding="utf-8")
+
+    def med(v):
+        v = sorted(v)
+        return round((v[(len(v) - 1) // 2] + v[len(v) // 2]) / 2, 1) if v else None
+
+    def summ(rs, pairs=None):
+        out = {}
+        for h in AFTER_H:
+            p = pairs[h] if pairs else [(r[f"r{h}"], r[f"x{h}"]) for r in rs if f"x{h}" in r]
+            if p:
+                out[str(h)] = {"n": len(p), "r": round(sum(a for a, _ in p) / len(p), 1),
+                               "x": round(sum(b for _, b in p) / len(p), 1),
+                               "beat": round(100 * sum(b > 0 for _, b in p) / len(p))}
+        if rs:
+            out["hi20"] = med([r["hi20"] for r in rs if "hi20" in r])
+            out["lo20"] = med([r["lo20"] for r in rs if "lo20" in r])
+            out["since"] = rs[0]["d"]
+        return out
+
+    buy = [r for r in rows if r["k"] == "buy"]
+    sell = [r for r in rows if r["k"] == "sell"]
+    groups = {"buy": buy, "buy_first": [r for r in buy if r["nth"] == 1], "buy_repeat": [r for r in buy if r["nth"] > 1],
+              "sell_trend": [r for r in sell if r["trend"]], "sell_below": [r for r in sell if not r["trend"]]}
+    card = {g: summ(rs) for g, rs in groups.items()}
+    card["base"] = summ([], base)
+
+    pos = {d: i for i, d in enumerate(dates)}
+    trend = {}
+    for g in ("buy", "sell_trend"):
+        idx = [(pos[r["d"]], r) for r in groups[g] if r["d"] in pos]
+        t_ = {}
+        for h in (5, 20):
+            beat, ret = [], []
+            for t in range(len(dates)):
+                sel = [r for i, r in idx if t - h - TREND_SIG + 1 <= i <= t - h and f"x{h}" in r]
+                ok = len(sel) >= TREND_MIN
+                beat.append(round(100 * sum(r[f"x{h}"] > 0 for r in sel) / len(sel)) if ok else None)
+                ret.append(round(sum(r[f"r{h}"] for r in sel) / len(sel), 1) if ok else None)
+            t_[f"beat{h}"], t_[f"r{h}"] = beat, ret
+        trend[g] = t_
+    (DATA / "signal_stats.json").write_text(json.dumps({"updated": now, "card": card, "dates": dates, "trend": trend,
+                                                        "trend_sig": TREND_SIG},
+                                                       ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
 def main():
@@ -371,6 +427,40 @@ def main():
                 break
         return {"s": cur, "run": run, "since": bars[len(bars) - run]["d"]} if cur else None
 
+    def pct(a, b):
+        return round((a / b - 1) * 100, 1)
+
+    def after(bars, market, d):
+        """신호 뒤 결과(신호일 종가 기준): h거래일 뒤 수익률 r·시장 대비 x(%p), 20거래일 안 최고·최저, 지금까지(now)."""
+        mc = mclose.get(market) or {}
+        i = next((k for k, b in enumerate(bars) if b["d"] == d), None)
+        if i is None or not bars[i]["c"]:
+            return {}, {}
+        c0, m0 = bars[i]["c"], mc.get(d)
+        o = {"c0": c0}
+        for h in AFTER_H:
+            if i + h < len(bars):
+                o[f"r{h}"] = pct(bars[i + h]["c"], c0)
+                mj = mc.get(bars[i + h]["d"])
+                if m0 and mj:
+                    o[f"x{h}"] = round(o[f"r{h}"] - pct(mj, m0), 1)
+        w = bars[i + 1:i + 21]
+        if len(w) == 20:
+            o["hi20"], o["lo20"] = pct(max(b["h"] for b in w), c0), pct(min(b["l"] for b in w), c0)
+        last, ml = bars[-1], mc.get(bars[-1]["d"])
+        now = {"days": len(bars) - 1 - i, "rnow": pct(last["c"], c0)}
+        if m0 and ml:
+            now["xnow"] = round(now["rnow"] - pct(ml, m0), 1)
+        if len(bars) >= 20:
+            now["ma20"] = last["c"] > sum(b["c"] for b in bars[-20:]) / 20
+        return o, now
+
+    # 신호 기록은 지우지 않고 쌓는다(일봉은 6개월만 받아도 옛 신호 결과가 남도록, 2026-10-27 사용자 결정)
+    slog = {}
+    if SIGNAL_LOG.exists():
+        slog = {(r["k"], r["code"], r["d"]): r for r in json.loads(SIGNAL_LOG.read_text(encoding="utf-8"))["rows"]}
+    base = {h: [] for h in AFTER_H}                          # 기준선: 같은 종목들을 아무 날이나 샀다면 (r, x)
+
     tdays = sorted(set(mclose.get("KOSPI", {})))[-SIG_TDAYS:]
     sellfeed = []
     sig_cut = tdays[0] if tdays else "9999"
@@ -397,8 +487,9 @@ def main():
 
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     index = []
-    feed = []                                                # 목록 맨 위 '최근 의견 전환' (최근 FEED_DAYS일)
+    feed = []                                                # '의견 전환' 탭 (최근 FEED_DAYS일)
     feed_cut = (datetime.now(KST) - timedelta(days=FEED_DAYS)).strftime("%Y-%m-%d")
+    badge_cut = (datetime.now(KST) - timedelta(days=FLIP_BADGE_DAYS)).strftime("%Y-%m-%d")
     for code, v in by_code.items():
         path = STOCKS / f"{code}.json"
         old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -418,12 +509,19 @@ def main():
         sigs = strength_signals(bars, market) if market else []
         sells = sell_signals(bars)
         edges = edge_states(bars)
-        for s_ in sells:
-            if s_["d"] >= sig_cut:
-                sellfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
-        for s_ in sigs:
-            if s_["d"] >= sig_cut:
-                sigfeed.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_})
+        for kind, lst, out in (("sell", sells, sellfeed), ("buy", sigs, sigfeed)):
+            for s_ in lst:
+                o, aft = after(bars, market, s_["d"])
+                slog[(kind, code, s_["d"])] = {"k": kind, "code": code, "name": v["name"], "market": market, **s_, **o}
+                if s_["d"] >= feed_cut:
+                    out.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_, **aft})
+        mc_ = mclose.get(market) or {}
+        for i in range(20, len(bars)):
+            if bars[i]["d"] in mc_ and bars[i]["c"]:
+                for h in AFTER_H:
+                    if i + h < len(bars) and bars[i + h]["d"] in mc_:
+                        r_ = pct(bars[i + h]["c"], bars[i]["c"])
+                        base[h].append((r_, r_ - pct(mc_[bars[i + h]["d"]], mc_[bars[i]["d"]])))
         path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now, "market": market,
                                     "signals": sigs, "sells": sells,
                                     "edges": "".join({1: "+", -1: "-", 0: "."}[x] for x in edges),
@@ -435,8 +533,9 @@ def main():
         rlast = None
         for r in reps:
             if r.get("flip") and r["date"][:10] >= feed_cut:
-                rb[r["dir"]].add(r["broker"])
-                rlast = max(rlast or "", r["date"][:10])
+                if r["date"][:10] >= badge_cut:
+                    rb[r["dir"]].add(r["broker"])
+                    rlast = max(rlast or "", r["date"][:10])
                 feed.append({"date": r["date"][:16], "code": code, "name": v["name"], "broker": r["broker"],
                              "prev_dir": r["prev_dir"], "dir": r["dir"], "from": r["from"], "to": r["to"], "id": r["id"]})
         last = reps[0]
@@ -476,6 +575,7 @@ def main():
                                                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (DATA / "flips.json").write_text(json.dumps({"updated": now, "days": FEED_DAYS, "flips": feed},
                                                 ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    write_signal_stats(slog, base, sorted(mclose.get("KOSPI", {})), now)
     (DATA / "index.json").write_text(json.dumps({"updated": now, "stocks": index},
                                                 ensure_ascii=False, separators=(",", ":")),
                                      encoding="utf-8")

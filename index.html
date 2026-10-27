@@ -16,7 +16,8 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261021e">
+<link rel="stylesheet" href="assets/style.css?v=20261027a">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -57,6 +58,7 @@
         </ol>
         <p class="rl-n">같은 종목이 다시 나와도 모두 보여주고, 첫 신호(직전 20거래일 동안 신호 없음)인지 몇 번째인지 표시해요 · 리포트가 온 적 있는 종목 안에서만 찾아요</p>
       </div>
+      <div class="sc" id="scBuy" hidden></div>
       <div class="chips"><button type="button" class="chip" id="sigFirst" aria-pressed="false">첫 신호만</button></div>
       <div class="panel"><ol class="feed-list sig-list" id="sigList"></ol><div class="feed-btns" id="sigBtns" hidden><button type="button" class="feed-more" id="sigMore">더 보기</button><button type="button" class="feed-more" id="sigLess" hidden>접기</button></div></div>
     </section>
@@ -70,6 +72,7 @@
         </ol>
         <p class="rl-n">많이 거래됐지만 파는 쪽이 이긴 날이에요. 상대강도·20일선은 보지 않고, 대신 줄마다 "상승 추세 중"(전날 종가가 20일선 위) / "20일선 아래"를 표시해요 · 일봉엔 매수·매도 체결 구분이 없어 캔들로 판단해요</p>
       </div>
+      <div class="sc" id="scSell" hidden></div>
       <div class="chips"><button type="button" class="chip" id="sellTrend" aria-pressed="false">상승 추세 중만 (전일 20일선 위)</button></div>
       <div class="panel"><ol class="feed-list sig-list" id="sellList"></ol><div class="feed-btns" id="sellBtns" hidden><button type="button" class="feed-more" id="sellMore">더 보기</button><button type="button" class="feed-more" id="sellLess" hidden>접기</button></div></div>
     </section>
@@ -118,6 +121,26 @@ const sg = v => (v >= 0 ? '+' : '') + v.toFixed(1);
 const MK = {KOSPI: '코스피', KOSDAQ: '코스닥'};
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;   // 로컬 날짜(UTC로 밀리지 않게)
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
+// 의견 전환·거래량 신호 탭: 처음엔 이번 주(월요일부터)+지난주, '더 보기'마다 한 주씩 더 (사용자 요청 10-27)
+const WEEKS_FIRST = 2, WEEK = 7 * 864e5;
+const monday = s => { const x = new Date(s.slice(0, 10) + 'T00:00:00'); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
+const THIS_MON = monday(ymd(new Date()));
+const wkAgo = s => Math.round((THIS_MON - monday(s)) / WEEK);
+const mdd = d => ymd(d).slice(5).replace('-', '.');
+function weekPage(rows, weeks) {          // rows는 최신순
+  const vis = rows.filter(f => wkAgo(f.date) < weeks), rest = rows.filter(f => wkAgo(f.date) >= weeks);
+  if (!rest.length) return {vis, next: null, label: ''};
+  const w = Math.min(...rest.map(f => wkAgo(f.date))), n = rest.filter(f => wkAgo(f.date) === w).length;
+  const s = new Date(THIS_MON - w * WEEK), e = new Date(s); e.setDate(e.getDate() + 6);
+  return {vis, next: w + 1, label: `더 보기 · ${mdd(s)}~${mdd(e)} 주 ${n}건`};
+}
+function weekBtns(p, page, weeks) {
+  const more = document.getElementById(p + 'More'), less = document.getElementById(p + 'Less');
+  more.hidden = !page.next; more.textContent = page.label;
+  less.hidden = weeks <= WEEKS_FIRST;
+  document.getElementById(p + 'Btns').hidden = more.hidden && less.hidden;
+}
+const weekEmpty = (all, what) => `<li class="empty">${all ? `이번 주·지난주엔 ${what} 없어요 — 아래 더 보기` : `최근 1개월 동안 ${what} 없어요`}</li>`;
 const PAGE = 80;
 let stocks = [], sort = 'recent', on = new Set(), shown = PAGE, weekCut = '';
 
@@ -285,9 +308,7 @@ addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 showTab(location.hash.slice(1));
 
 // 강도·거래량 신호 탭
-// 최근 5거래일은 처음부터 전부 보여준다(사용자 요청 10-21) — 더 보기·접기는 쓰지 않음
-let sigs = [], sigFirst = false, sigShown = Infinity;
-const SIG_FIRST = Infinity;
+let sigs = [], sigFirst = false, sigWeeks = WEEKS_FIRST, sigPage = {};
 function sigSpark(rs) {
   if (!rs) return '';
   const w = 72, h = 22, p = 2, lo = Math.min(100, ...rs), hi = Math.max(100, ...rs);
@@ -297,58 +318,152 @@ function sigSpark(rs) {
 }
 function renderSig() {
   const rows = sigs.filter(f => !sigFirst || f.nth === 1);
-  document.getElementById('sigSub').textContent = `최근 5거래일 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  document.getElementById('sigSub').textContent = `최근 1개월 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  sigPage = weekPage(rows, sigWeeks);
   let html = '', day = '';
-  rows.slice(0, sigShown).forEach(f => {
+  sigPage.vis.forEach(f => {
     if (f.date !== day) { day = f.date; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})</li>`; }
     html += `<li><a class="sig-row" href="stock.html?code=${f.code}">
       <span class="fn">${esc(f.name)}<small class="mk">${MK[f.market]}</small></span>
       <span class="sv"><span class="k">거래량</span><b>${f.volx.toFixed(1)}배</b></span>
       <span class="sv"><span class="k">그날</span><b class="${f.chg >= 0 ? 'pos' : 'neg'}">${sg(f.chg)}%</b></span>
+      ${afterCell(f)}
       <span class="ss"><span class="k">시장 대비 3개월</span><b class="${(f.rel3 ?? 0) >= 0 ? 'pos' : 'neg'}">${f.rel3 == null ? '-' : sg(f.rel3) + '%p'}</b>${sigSpark(f.rs)}</span>
       <span class="nth ${f.nth === 1 ? 'first' : 'again'}">${f.nth === 1 ? '첫 신호' : `20일 내 ${f.nth}번째`}</span></a></li>`;
   });
-  document.getElementById('sigList').innerHTML = html || '<li class="empty">최근 5거래일 동안 신호가 없어요</li>';
-  const more = document.getElementById('sigMore'), less = document.getElementById('sigLess');
-  more.hidden = rows.length <= sigShown;
-  more.textContent = `더 보기 (${rows.length - sigShown}건 남음)`;
-  less.hidden = sigShown <= SIG_FIRST;
-  document.getElementById('sigBtns').hidden = more.hidden && less.hidden;
+  document.getElementById('sigList').innerHTML = html || weekEmpty(rows.length, '신호가');
+  weekBtns('sig', sigPage, sigWeeks);
 }
-document.getElementById('sigFirst').onclick = e => { sigFirst = !sigFirst; e.currentTarget.setAttribute('aria-pressed', sigFirst); sigShown = SIG_FIRST; renderSig(); };
-document.getElementById('sigMore').onclick = () => { sigShown += 30; renderSig(); };
-document.getElementById('sigLess').onclick = () => { sigShown = SIG_FIRST; renderSig(); document.getElementById('pane-signals').scrollIntoView({block: 'start'}); };
+document.getElementById('sigFirst').onclick = e => { sigFirst = !sigFirst; e.currentTarget.setAttribute('aria-pressed', sigFirst); sigWeeks = WEEKS_FIRST; renderSig(); };
+document.getElementById('sigMore').onclick = () => { sigWeeks = sigPage.next; renderSig(); };
+document.getElementById('sigLess').onclick = () => { sigWeeks = WEEKS_FIRST; renderSig(); document.getElementById('pane-signals').scrollIntoView({block: 'start'}); };
 // 매도 우위 대량 거래
-let sells = [], sellTrend = false, sellShown = Infinity;
+let sells = [], sellTrend = false, sellWeeks = WEEKS_FIRST, sellPage = {};
 function renderSell() {
   const rows = sells.filter(f => !sellTrend || f.trend);
-  document.getElementById('sellSub').textContent = `최근 5거래일 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  document.getElementById('sellSub').textContent = `최근 1개월 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  sellPage = weekPage(rows, sellWeeks);
   let html = '', day = '';
-  rows.slice(0, sellShown).forEach(f => {
+  sellPage.vis.forEach(f => {
     if (f.date !== day) { day = f.date; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})</li>`; }
     html += `<li><a class="sig-row" href="stock.html?code=${f.code}">
       <span class="fn">${esc(f.name)}${f.market ? `<small class="mk">${MK[f.market]}</small>` : ''}</span>
       <span class="sv"><span class="k">거래량</span><b>${f.volx.toFixed(1)}배</b></span>
       <span class="sv"><span class="k">그날</span><b class="${f.chg >= 0 ? 'pos' : 'neg'}">${sg(f.chg)}%</b></span>
+      ${afterCell(f)}
       <span class="ss"><span class="k">시장 대비 3개월</span><b class="${(f.rel3 ?? 0) >= 0 ? 'pos' : 'neg'}">${f.rel3 == null ? '-' : sg(f.rel3) + '%p'}</b>${sigSpark(f.rs)}</span>
       <span class="nth ${f.trend ? 'trend' : 'again'}">${f.trend ? '상승 추세 중' : '20일선 아래'}</span></a></li>`;
   });
-  document.getElementById('sellList').innerHTML = html || '<li class="empty">최근 5거래일 동안 해당 종목이 없어요</li>';
-  const more = document.getElementById('sellMore'), less = document.getElementById('sellLess');
-  more.hidden = rows.length <= sellShown;
-  more.textContent = `더 보기 (${rows.length - sellShown}건 남음)`;
-  less.hidden = sellShown <= SIG_FIRST;
-  document.getElementById('sellBtns').hidden = more.hidden && less.hidden;
+  document.getElementById('sellList').innerHTML = html || weekEmpty(rows.length, '해당 종목이');
+  weekBtns('sell', sellPage, sellWeeks);
 }
-document.getElementById('sellTrend').onclick = e => { sellTrend = !sellTrend; e.currentTarget.setAttribute('aria-pressed', sellTrend); sellShown = SIG_FIRST; renderSell(); };
-document.getElementById('sellMore').onclick = () => { sellShown += 30; renderSell(); };
-document.getElementById('sellLess').onclick = () => { sellShown = SIG_FIRST; renderSell(); document.getElementById('pane-signals').scrollIntoView({block: 'start'}); };
+document.getElementById('sellTrend').onclick = e => { sellTrend = !sellTrend; e.currentTarget.setAttribute('aria-pressed', sellTrend); sellWeeks = WEEKS_FIRST; renderSell(); };
+document.getElementById('sellMore').onclick = () => { sellWeeks = sellPage.next; renderSell(); };
+document.getElementById('sellLess').onclick = () => { sellWeeks = WEEKS_FIRST; renderSell(); document.getElementById('pane-signals').scrollIntoView({block: 'start'}); };
 document.getElementById('sigSeg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   document.querySelectorAll('#sigSeg button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
   document.getElementById('buyBox').hidden = b.dataset.v !== 'buy';
   document.getElementById('sellBox').hidden = b.dataset.v !== 'sell';
 });
+
+// 신호 뒤 결과: 신호일 종가 → 최근 종가 (사용자 요청 10-27)
+function afterCell(f) {
+  if (f.rnow == null) return '<span class="sv af"></span>';
+  if (!f.days) return '<span class="sv af"><span class="k">그 후</span><b class="mut">오늘 신호</b></span>';
+  const cls = v => v >= 0 ? 'pos' : 'neg';
+  return `<span class="sv af"><span class="k">그 후 ${f.days}일</span><b class="${cls(f.rnow)}">${sg(f.rnow)}%</b>` +
+    (f.xnow == null ? '' : `<span class="k"> · 시장 대비</span><b class="${cls(f.xnow)}">${sg(f.xnow)}%p</b>`) +
+    (f.ma20 == null ? '' : `<span class="ma ${f.ma20 ? 'on' : ''}">${f.ma20 ? '20일선 위' : '20일선 아래'}</span>`) + '</span>';
+}
+
+// 신호 성적표 + 추세 차트 (signal_stats.json, 매일 build.py가 누적 기록으로 다시 계산)
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const alpha = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+const SC = {
+  buy: {el: 'scBuy', g: 'buy', color: '--sig', rows: [['buy', '이 신호 전체'], ['buy_first', '┗ 첫 신호'], ['buy_repeat', '┗ 재신호'], ['base', '아무 날이나 샀다면']]},
+  sell: {el: 'scSell', g: 'sell_trend', color: '--sell', rows: [['sell_trend', '상승 추세 중'], ['sell_below', '20일선 아래'], ['base', '아무 날이나 샀다면']]},
+};
+function scCard(k, st) {
+  const c = SC[k], card = st.card, main = card[c.rows[0][0]];
+  const cell = (g, h) => { const v = card[g]?.[h]; if (!v) return '<td>-</td>';
+    return `<td><b class="${v.x >= 0 ? 'pos' : 'neg'}">${sg(v.x)}%p</b><small>${v.beat}% · ${v.n.toLocaleString('ko-KR')}건</small></td>`; };
+  return `<div class="sc-card">
+    <p class="sc-h">신호 성적표 <span>신호 난 날 종가에 샀다면, 며칠 뒤 시장보다 나았나 · ${main.since.slice(5).replace('-', '.')}부터 쌓은 기록</span></p>
+    <div class="sc-tw"><table class="sc-t"><thead><tr><th></th><th>5일 뒤</th><th>10일 뒤</th><th>20일 뒤</th></tr></thead><tbody>
+    ${c.rows.map(([g, lab]) => `<tr class="${g === 'base' ? 'base' : ''}"><th>${lab}</th>${['5', '10', '20'].map(h => cell(g, h)).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    <p class="sc-n">칸마다 <b>시장 대비 평균</b>(굵게) · 시장 이긴 비율 · 건수 · ‘아무 날이나’는 같은 종목들을 아무 날에나 샀을 때(최근 6개월)라 비교 기준이에요 · 20일 안 가장 오를 때 <b>${sg(main.hi20)}%</b> / 가장 빠질 때 <b>${sg(main.lo20)}%</b> (중앙값)</p>
+  </div>
+  <div class="sc-card tc-card">
+    <p class="sc-h">성적 추세 <span>그날까지 결과가 나온 최근 ${st.trend_sig}거래일 신호 기준 · 5일 뒤 선은 1주, 20일 뒤 선은 한 달 늦게 따라와요</span></p>
+    <p class="tc-read" id="${c.el}Read"></p>
+    <div class="tc-l">시장 이긴 비율 <span class="lg"><i class="s"></i>5일 뒤 <i class="d"></i>20일 뒤 · 점선 50%</span></div><div class="tc" data-p="0"></div>
+    <div class="tc-l">평균 수익률 <span class="lg"><i class="s"></i>5일 뒤 <i class="d"></i>20일 뒤 · 점선 0%</span></div><div class="tc" data-p="1"></div>
+    <div class="tc-l">시장 <span class="lg"><i class="s k1"></i>코스피 <i class="d k2"></i>코스닥 · 첫날 = 100</span></div><div class="tc tc-last" data-p="2"></div>
+  </div>`;
+}
+function scCharts(k, st, mk) {
+  const c = SC[k], box = document.getElementById(c.el), t = st.trend[c.g], dates = st.dates;
+  const col = css(c.color), txt = css('--text-2'), mut = css('--muted'), LS = LightweightCharts.LineStyle;
+  box.style.setProperty('--tc', col);
+  const ser = vals => dates.map((d, i) => vals[i] == null ? {time: d} : {time: d, value: vals[i]});
+  const idx = m => { const mp = Object.fromEntries((mk[m] || []).map(x => [x.d, x.c])), b = mp[dates.find(d => mp[d])];
+    return dates.map(d => mp[d] && b ? +(mp[d] / b * 100).toFixed(1) : null); };
+  const P = [
+    {a: t.beat5, b: t.beat20, ca: col, cb: alpha(col, 0.5), ref: 50, f: v => v.toFixed(0) + '%'},
+    {a: t.r5, b: t.r20, ca: col, cb: alpha(col, 0.5), ref: 0, f: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%'},
+    {a: idx('KOSPI'), b: idx('KOSDAQ'), ca: txt, cb: mut, ref: 100, f: v => v.toFixed(0)},
+  ];
+  const charts = [], series = [];
+  box.querySelectorAll('.tc').forEach((el, i) => {
+    const p = P[i], last = i === 2;
+    const ch = LightweightCharts.createChart(el, {
+      autoSize: true, handleScroll: false, handleScale: false,
+      layout: {background: {color: 'transparent'}, textColor: txt, fontSize: 11, attributionLogo: false},
+      grid: {vertLines: {visible: false}, horzLines: {color: css('--line')}},
+      rightPriceScale: {borderVisible: false, minimumWidth: 52, scaleMargins: {top: 0.1, bottom: 0.08}},
+      timeScale: {visible: last, borderVisible: false, fixLeftEdge: true, fixRightEdge: true},
+      crosshair: {mode: LightweightCharts.CrosshairMode.Normal, horzLine: {visible: false, labelVisible: false}},
+      localization: {priceFormatter: p.f},
+    });
+    const sa = ch.addLineSeries({color: p.ca, lineWidth: 2, priceLineVisible: false, lastValueVisible: false});
+    const sb = ch.addLineSeries({color: p.cb, lineWidth: 2, lineStyle: LS.Dashed, priceLineVisible: false, lastValueVisible: false});
+    sa.setData(ser(p.a)); sb.setData(ser(p.b));
+    sa.createPriceLine({price: p.ref, color: mut, lineWidth: 1, lineStyle: LS.Dotted, axisLabelVisible: false});
+    ch.timeScale().fitContent();
+    charts.push(ch); series.push(sa);
+  });
+  const fmtv = (v, f) => v == null ? '-' : f(v);
+  const read = i => {
+    const d = dates[i];
+    document.getElementById(c.el + 'Read').innerHTML = `<b>${d.slice(5).replace('-', '.')}</b> · 시장 이긴 비율 5일 뒤 <b>${fmtv(P[0].a[i], P[0].f)}</b> / 20일 뒤 ${fmtv(P[0].b[i], P[0].f)}` +
+      ` · 평균 수익률 5일 뒤 <b>${fmtv(P[1].a[i], P[1].f)}</b> / 20일 뒤 ${fmtv(P[1].b[i], P[1].f)} · 코스피 ${fmtv(P[2].a[i], P[2].f)} · 코스닥 ${fmtv(P[2].b[i], P[2].f)}`;
+  };
+  const lastI = dates.length - 1;
+  read(lastI);
+  let syncing = false;
+  charts.forEach((ch, i) => ch.subscribeCrosshairMove(p => {
+    if (syncing) return;
+    const j = p.time ? dates.indexOf(p.time) : -1;
+    syncing = true;
+    charts.forEach((o, k2) => { if (k2 === i) return;
+      const v = P[k2].a[j] ?? P[k2].b[j];
+      if (j >= 0 && v != null) o.setCrosshairPosition(v, p.time, series[k2]); else o.clearCrosshairPosition(); });
+    syncing = false;
+    read(j >= 0 ? j : lastI);
+  }));
+}
+Promise.all([fetch('data/signal_stats.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null),
+             fetch('data/market.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {})]).then(([st, mk]) => {
+  if (!st || !window.LightweightCharts) return;
+  ['buy', 'sell'].forEach(k => {
+    const box = document.getElementById(SC[k].el);
+    if (!st.card[SC[k].rows[0][0]]?.since) return;
+    box.innerHTML = scCard(k, st); box.hidden = false;
+    scCharts(k, st, mk);
+  });
+}).catch(() => {});
 
 fetch('data/signals.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   sigs = d?.signals || []; sells = d?.sells || [];
@@ -363,14 +478,13 @@ fetch('data/signals.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null
 
 // 최근 의견 전환: 같은 증권사가 직전 리포트와 반대 방향(상향↔하향)으로 낸 리포트, 최신순
 const DIRK = {up: '상향', down: '하향'};
-let flips = [], feedShown = 12;
+let flips = [], feedWeeks = WEEKS_FIRST, feedPage = {};
 function renderFeed() {
-  const box = document.getElementById('feedBox');
-  if (!flips.length) { document.getElementById('feed').innerHTML = '<li class="empty">최근 2주 동안 의견 전환이 없어요</li>'; return; }
   document.getElementById('feedSub').textContent =
-    `최근 2주 · ${flips.length}건 · ${new Set(flips.map(f => f.code)).size}종목 · 최신순`;
+    `최근 1개월 · ${flips.length}건 · ${new Set(flips.map(f => f.code)).size}종목 · 최신순`;
+  feedPage = weekPage(flips, feedWeeks);
   let html = '', day = '';
-  flips.slice(0, feedShown).forEach(f => {
+  feedPage.vis.forEach(f => {
     const d = f.date.slice(0, 10);
     if (d !== day) {
       day = d;
@@ -381,29 +495,16 @@ function renderFeed() {
       <span class="fx"><span class="${f.prev_dir === 'up' ? 'pos' : 'neg'}">${DIRK[f.prev_dir]}</span><span class="arrow">→</span><b class="${f.dir === 'up' ? 'pos' : 'neg'}">${DIRK[f.dir]}</b>
       <span class="ft">· ${f.from ? fmt(f.from) + '→' : ''}${fmt(f.to)}</span></span></a></li>`;
   });
-  document.getElementById('feed').innerHTML = html;
-  // 더 보기로 늘린 뒤에는 '접기'로 처음 12건으로 되돌린다
-  const more = document.getElementById('feedMore'), less = document.getElementById('feedLess');
-  more.hidden = flips.length <= feedShown;
-  more.textContent = `더 보기 (${flips.length - feedShown}건 남음)`;
-  less.hidden = feedShown <= FEED_FIRST;
-  document.getElementById('feedBtns').hidden = more.hidden && less.hidden;
+  document.getElementById('feed').innerHTML = html || weekEmpty(flips.length, '의견 전환이');
+  weekBtns('feed', feedPage, feedWeeks);
 }
-let FEED_FIRST = 12;                                   // 데이터를 받으면 '최근 7일 전부'로 바뀐다
-document.getElementById('feedMore').onclick = () => { feedShown += 20; renderFeed(); };
+document.getElementById('feedMore').onclick = () => { feedWeeks = feedPage.next; renderFeed(); };
 document.getElementById('feedLess').onclick = () => {
-  feedShown = FEED_FIRST; renderFeed();
+  feedWeeks = WEEKS_FIRST; renderFeed();
   document.getElementById('feedBox').scrollIntoView({block: 'start'});
 };
 fetch('data/flips.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   flips = d?.flips || [];
-  // 처음에는 최근 7일(가장 최근 전환일 포함)을 다 펼쳐 보여주고, 그 이전만 '더 보기'로
-  if (flips.length) {
-    const c = new Date(flips[0].date.slice(0, 10) + 'T00:00:00'); c.setDate(c.getDate() - 6);
-    const cut = ymd(c);
-    FEED_FIRST = Math.max(1, flips.filter(f => f.date.slice(0, 10) >= cut).length);
-    feedShown = FEED_FIRST;
-  }
   renderFeed();
   const lastDay = flips[0]?.date.slice(0, 10);
   const n = flips.filter(f => f.date.slice(0, 10) === lastDay).length;
