@@ -11,11 +11,18 @@ daily.py 가 build.py 다음에 실행한다 (Python39-32). 결과는 data/earni
 
 세션은 C:\\ClaudeCode\\.stockeasy_session.json (_api-maps/stockeasy_session_import.py 로 저장).
 세션이 끊기면 exit 3 — 기존 earnings.json 은 그대로 두고 daily.py 가 알림을 보낸다.
+
+2026-11-06: 잠정 실적 목록은 '요청 시점' 시총 5,000억 이상만 오고(서버 고정) 지난 날짜는 캐시라,
+  시총이 모자란 종목은 영영 결과가 빠졌다(제주항공 등 35건). → 일정의 DART 접수번호로 공시 원문
+  (영업(잠정)실적(공정공시) 정형 서식)을 읽어 같은 모양의 result 를 채운다(src="dart"). 접수된 공시는 안 바뀌니 영구 캐시.
 """
+import html
+import io
 import json
 import re
 import sys
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -178,6 +185,90 @@ def checks(code, pe, q, hist, today):
     return out
 
 
+# ── DART 잠정실적 공시 원문 (시총 5,000억 미만 폴백) ─────────────────────────────
+DART_ENV = Path(r"C:\ClaudeCode\telegram-report-bot\.env")     # DART_API_KEY 는 리포트 봇과 같이 쓴다
+DART_ROWS = {"매출액": "rev", "영업이익": "op", "당기순이익": "net"}
+DART_UNIT = {"억원": 1, "백만원": 0.01, "천원": 0.00001, "원": 1e-8}
+
+
+def dart_key():
+    for ln in DART_ENV.read_text(encoding="utf-8").splitlines():
+        if ln.startswith("DART_API_KEY="):
+            return ln.split("=", 1)[1].strip()
+    raise RuntimeError("DART_API_KEY 없음")
+
+
+def dart_parse(xml):
+    """영업(잠정)실적 서식: 항목 · 당해실적 · 당기 · 전기 · 전기대비% · 전환여부 · 전년동기 · ... (억원으로 환산)."""
+    m = re.search(r"단위\s*:\s*(억원|백만원|천원|원)", re.sub(r"<[^>]+>", " ", xml))
+    if not m:
+        return None
+    mul = DART_UNIT[m.group(1)]
+    c = [re.sub(r"\s+", "", html.unescape(re.sub(r"<[^>]+>", " ", td)))
+         for td in re.findall(r"<T[DEH][^>]*>(.*?)</T[DEH]>", xml, re.S | re.I)]
+
+    def num(i):
+        s = c[i].replace(",", "") if i < len(c) else ""
+        return round(float(s) * mul, 1) if re.fullmatch(r"-?\d+(\.\d+)?", s) else None
+    out = {}
+    for i, t in enumerate(c):
+        k = DART_ROWS.get(t)
+        if k and k not in out:
+            j = i + 2 if i + 1 < len(c) and c[i + 1] == "당해실적" else i + 1
+            if num(j) is not None:
+                out[k] = {"cur": num(j), "prev": num(j + 1), "yago": num(j + 4)}
+    return out if "rev" in out and "op" in out else None
+
+
+def dart_doc(rc, key):
+    """접수번호 → 파싱 결과. 공시는 안 바뀌므로 성공한 것만 영구 캐시."""
+    p = CACHE / f"dart_{rc}.json"
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    r = requests.get("https://opendart.fss.or.kr/api/document.xml", params={"crtfc_key": key, "rcept_no": rc}, timeout=30)
+    r.raise_for_status()
+    if r.content[:2] != b"PK":
+        raise RuntimeError(f"DART 문서 없음: {r.text[:80]}")
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    got = dart_parse(z.read(z.namelist()[0]).decode("utf-8", "ignore"))
+    if not got:
+        raise RuntimeError("서식 파싱 실패")
+    p.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8")
+    return got
+
+
+def eok_str(v):
+    """스탁이지 value 와 같은 표기: 7,818억 · 23조8270억."""
+    if v is None:
+        return None
+    a, s = abs(v), "-" if v < 0 else ""
+    if a >= 10000:
+        return f"{s}{int(a // 10000)}조{round(a % 10000)}억"
+    return f"{s}{round(a):,}억"
+
+
+def dart_result(d, rc, est):
+    """DART 파싱 결과 → 화면용 result (스탁이지 earnings_results 와 같은 모양). 예상 대비는 네이버 추정치 기준."""
+    est = est or {}
+    names = {"rev": ("revenue", "매출"), "op": ("operating_profit", "영업이익"), "net": ("net_profit", "순이익")}
+    m, vs = {}, {}
+    for k, (rk, _) in names.items():
+        x = d.get(k) or {}
+        e = est.get(k)
+        vs[k] = pct(x.get("cur"), e) if x.get("cur") is not None and e and e > 0 and x["cur"] > 0 else None
+        m[rk] = {"value": eok_str(x.get("cur")), "estimate": eok_str(e), "vs_estimate_pct": vs[k],
+                 "qoq": growth(x.get("cur"), x.get("prev")), "yoy": growth(x.get("cur"), x.get("yago"))}
+    part = [(names[k][1], vs[k]) for k in ("rev", "op") if vs[k] is not None]
+    if not part:
+        head = f"매출 {eok_str(d['rev']['cur'])} · 영업이익 {eok_str(d['op']['cur'])}"
+    elif len(part) == 2 and (part[0][1] >= 0) == (part[1][1] >= 0):
+        head = f"매출·영업이익 모두 예상 {'상회' if part[0][1] >= 0 else '하회'}({part[0][1]:+.1f}%·{part[1][1]:+.1f}%)"
+    else:
+        head = "·".join(f"{n} 예상 {'상회' if v >= 0 else '하회'}({v:+.1f}%)" for n, v in part)
+    return {"headline": head, "kind": "interim", "rcept": rc, "src": "dart",
+            "surprise": vs["op"] if vs["op"] is not None else vs["rev"], "m": m}
+
+
 def price(bars, mc, d0):
     """발표 전 주가 흐름(최근 기준) + 발표 뒤 반응(발표일·다음 날 등락)."""
     if not bars:
@@ -253,6 +344,7 @@ def main():
     hist = json.loads(hpath.read_text(encoding="utf-8")) if hpath.exists() else {}
 
     out, fail = [], []
+    key, ndart, dfail = None, 0, []
     for it in items:
         code = it["symbol"]
         mk = MKT.get(it.get("market"), "KOSPI")
@@ -271,13 +363,24 @@ def main():
                              "surprise": (r.get("surprise") or {}).get("pct"),
                              "m": {k: {f: v.get(f) for f in ("value", "estimate", "vs_estimate_pct", "qoq", "yoy")}
                                    for k, v in (r.get("metrics") or {}).items()}}
+        elif it["source"] == "dart_actual_earnings" and it["record_date"] <= today.isoformat():
+            rc = re.search(r"\((\d{14})\)", it.get("detail") or "")      # 시총 5,000억 미만 → 공시 원문
+            try:
+                key = key or dart_key()
+                row["result"] = dart_result(dart_doc(rc.group(1), key), rc.group(1), row.get("est"))
+                ndart += 1
+            except Exception as e:
+                dfail.append(f"{it['company']}: {'접수번호 없음' if not rc else e}")
+            time.sleep(0.2)
         out.append(row)
     hpath.write_text(json.dumps(hist, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     out.sort(key=lambda x: (x["date"], x["name"]))
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "start": start, "items": out},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)} · 추정치 {sum('est' in x for x in out)}"
-          + (f" · 실패 {len(fail)}: {fail[:5]}" if fail else ""))
+    print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart})"
+          f" · 추정치 {sum('est' in x for x in out)}"
+          + (f" · 실패 {len(fail)}: {fail[:5]}" if fail else "")
+          + (f" · DART 파싱 실패 {len(dfail)}: {dfail[:5]}" if dfail else ""))
     if fail:
         sys.exit(2)
 
