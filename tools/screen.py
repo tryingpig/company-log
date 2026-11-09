@@ -141,6 +141,7 @@ def multi(corps, y, q, live):
             if d.get("fs") != fs:
                 d.clear()
                 d["fs"] = fs
+            d["rcept"] = r.get("rcept_no")                   # 앞 8자리 = 공시(접수)일
             d[nm] = num(r.get("thstrm_amount"))
             d[nm + "_prev"] = num(r.get("frmtrm_amount"))
             d[nm + "_cum"] = num(r.get("thstrm_add_amount"))
@@ -152,8 +153,8 @@ def quarter_values(corps, y, q, live):
     """분기 3개월 값 {corp: {fs, rev, op, rev_y, op_y}}. 4분기 = 사업보고서 연간 − 3분기 누적."""
     cur = multi(corps, y, q, live)
     if q != 4:
-        return {c: {"fs": d["fs"], "rev": d.get("rev"), "op": d.get("op"), "rev_y": d.get("rev_prev"), "op_y": d.get("op_prev")}
-                for c, d in cur.items()}
+        return {c: {"fs": d["fs"], "rev": d.get("rev"), "op": d.get("op"), "rev_y": d.get("rev_prev"), "op_y": d.get("op_prev"),
+                    "rcept": d.get("rcept")} for c, d in cur.items()}
     q3 = multi(corps, y, 3, False)
     out = {}
     for c, d in cur.items():
@@ -162,7 +163,8 @@ def quarter_values(corps, y, q, live):
             continue
         sub = lambda a, k: a - b[k] if a is not None and b.get(k) is not None else None  # noqa: E731
         out[c] = {"fs": d["fs"], "rev": sub(d.get("rev"), "rev_cum"), "op": sub(d.get("op"), "op_cum"),
-                  "rev_y": sub(d.get("rev_prev"), "rev_prev_cum"), "op_y": sub(d.get("op_prev"), "op_prev_cum")}
+                  "rev_y": sub(d.get("rev_prev"), "rev_prev_cum"), "op_y": sub(d.get("op_prev"), "op_prev_cum"),
+                  "rcept": d.get("rcept")}
     return out
 
 
@@ -430,6 +432,8 @@ def main():
     mclose = {m: {x["d"]: x["c"] for x in mdata.get(m, [])} for m in build.MARKETS}
     last_y = today.year - 1 if today.month > 3 else today.year - 2       # 가장 최근 사업보고서 연도
 
+    rpath = CACHE / "seen.json"
+    reg = json.loads(rpath.read_text(encoding="utf-8")) if rpath.exists() else {"since": today.isoformat(), "q": {}}
     out_q = []
     for y, q, live in quarters(today):
         py, pq = (y, q - 1) if q > 1 else (y - 1, 4)
@@ -448,7 +452,9 @@ def main():
             if d and d.get("rev") is not None:
                 pv = prev.get(corp) or {}
                 same = pv.get("fs") == d["fs"]
+                rc = d.get("rcept") or ""
                 x = {"src": "보고서", "fs": "연결" if d["fs"] == "CFS" else "별도", "rev": d["rev"], "op": d["op"],
+                     "d": f"{rc[:4]}-{rc[4:6]}-{rc[6:8]}" if len(rc) >= 8 else None, "rcept": rc or None,
                      "rev_yoy": growth(d["rev"], d["rev_y"]), "op_yoy": growth(d["op"], d["op_y"]),
                      "rev_qoq": growth(d["rev"], pv.get("rev")) if same else None,
                      "op_qoq": growth(d["op"], pv.get("op")) if same else None}
@@ -461,6 +467,16 @@ def main():
             x.update(code=code, name=stocks[code]["name"], market=stocks[code]["market"], corp=corp)
             rows.append(x)
         passed = [x for x in rows if first_pass(x)]
+        # 날짜별로 보이게: 1차에 처음 들어온 날(in)·잠정→보고서처럼 출처가 바뀐 날(upd) 기록 (사용자 요청 11-09)
+        for x in passed:
+            k = f"{y}.{q}Q|{x['code']}"
+            s = reg["q"].get(k)
+            if not s:
+                s = reg["q"][k] = {"in": today.isoformat(), "src": x["src"]}
+            elif s["src"] != x["src"]:
+                s.update(src=x["src"], upd=today.isoformat(), was=s["src"])
+            x["in"], x["upd"], x["was"] = s["in"], s.get("upd"), s.get("was")
+            x["d"] = x.get("d") or s["in"]
         print(f"{y}.{q}Q {'진행 중' if live else '확정'}: 실적 {len(rows)}곳(보고서 {sum(x['src'] == '보고서' for x in rows)}) · 1차 {len(passed)}")
 
         # 2차
@@ -541,7 +557,9 @@ def main():
         out_q[-1]["unchecked"] = miss
         print(f"  2차 {sum(bool(x['s2'].get('pass')) for x in passed)} · 3차 필수 {sum(bool((x.get('s3') or {}).get('pass')) for x in passed)}"
               + (f" · 확인 못 함 {miss}" if miss else ""))
+    rpath.write_text(json.dumps(reg, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "last_annual": last_y,
+                               "today": today.isoformat(), "since": reg["since"],
                                "rule": {"rev": MIN_REV, "op": MIN_OP, "turn_drop": TURN_DROP, "issue_years": ISSUE_YEARS},
                                "quarters": out_q}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     if BLOCKED[0]:

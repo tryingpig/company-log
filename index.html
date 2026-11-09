@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261109c">
+<link rel="stylesheet" href="assets/style.css?v=20261109d">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -31,7 +31,7 @@
     <button type="button" role="tab" id="tab-flips" aria-controls="pane-flips" aria-selected="false" data-tab="flips">의견 전환 <span class="tn" id="tnFlips"></span></button>
     <button type="button" role="tab" id="tab-signals" aria-controls="pane-signals" aria-selected="false" data-tab="signals">거래량 신호 <span class="tn" id="tnSig" title="매수 우위"></span><span class="tn sell" id="tnSell" title="매도 우위"></span></button>
     <button type="button" role="tab" id="tab-earn" aria-controls="pane-earn" aria-selected="false" data-tab="earn">실적 캘린더 <span class="tn" id="tnEarn" title="오늘 발표"></span></button>
-    <button type="button" role="tab" id="tab-scr" aria-controls="pane-scr" aria-selected="false" data-tab="scr">실적 스크리닝</button>
+    <button type="button" role="tab" id="tab-scr" aria-controls="pane-scr" aria-selected="false" data-tab="scr">실적 스크리닝 <span class="tn" id="tnScr" title="오늘 새로 1차 통과"></span></button>
   </nav>
 
   <div role="tabpanel" id="pane-scr" aria-labelledby="tab-scr" hidden>
@@ -43,7 +43,8 @@
         <ol class="rl">
           <li><b>매출 YoY +10% 이상</b> 그리고 <b>영업이익 YoY +10% 이상</b>(또는 흑자 전환)</li>
           <li><b>최근 분기 영업이익 흑자</b> — 적자 기업은 제외</li>
-          <li>QoQ는 같이 보여주고, 영업 레버리지(영업익 +20%·+30%, 매출 증가율의 2배)는 칩으로 골라 봐요</li>
+          <li>QoQ는 같이 보여주고, 영업 레버리지(영업익 +20%·+30%, 이익 레버리지 2배↑)는 칩으로 골라 봐요. <b>이익 레버리지 = 영업이익 증가율 ÷ 매출 증가율</b> — 매출 +20%·영업익 +60%면 3배. 매출 증가율이 10%를 겨우 넘으면 크게 부풀고, 흑자 전환은 계산할 수 없어 "-"</li>
+          <li>목록은 기본으로 <b>공시일별</b>로 묶어요. 오늘 새로 1차에 들어온 종목엔 「새로」, 잠정에서 보고서 확정치로 바뀐 종목엔 「잠정→확정치」가 붙어요</li>
         </ol>
         <p class="rl-n">2차 · 1차 통과 종목</p>
         <ol class="rl">
@@ -64,7 +65,7 @@
         <span class="lab">필터</span>
         <button type="button" class="chip" data-f="op20" aria-pressed="false">영업익 +20%↑</button>
         <button type="button" class="chip" data-f="op30" aria-pressed="false">영업익 +30%↑</button>
-        <button type="button" class="chip" data-f="lev2" aria-pressed="false">영업익 증가율 ≥ 매출 증가율 2배</button>
+        <button type="button" class="chip" data-f="lev2" aria-pressed="false" title="이익 레버리지 = 영업이익 증가율 ÷ 매출 증가율">이익 레버리지 2배↑</button>
         <button type="button" class="chip" data-f="qoq" aria-pressed="false">QoQ 매출·영업익 모두 증가</button>
         <button type="button" class="chip" data-f="fcf" aria-pressed="false">FCF +</button>
         <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
@@ -72,9 +73,10 @@
         <button type="button" class="chip" data-f="rep" aria-pressed="false">DART 보고서만 (보강 자료 제외)</button>
       </div>
       <div class="seg" role="group" aria-label="정렬" id="scrSort">
-        <button type="button" data-v="op" class="on" aria-pressed="true">영업익 증가율</button>
+        <button type="button" data-v="date" class="on" aria-pressed="true">최근 공시순</button>
+        <button type="button" data-v="op" aria-pressed="false">영업익 증가율</button>
         <button type="button" data-v="rev" aria-pressed="false">매출 증가율</button>
-        <button type="button" data-v="lev" aria-pressed="false">레버리지 배수</button>
+        <button type="button" data-v="lev" aria-pressed="false">이익 레버리지</button>
       </div>
       <p class="count" id="scrCount"></p>
       <div class="panel"><ol class="feed-list earn-list scr-list" id="scrList"></ol>
@@ -528,7 +530,10 @@ fetch('data/earnings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : nul
 }).catch(() => {});
 
 // 실적 스크리닝 (data/screen.json — tools/screen.py, 사용자 기준 11-09). 판단 문구 없이 기준 통과 여부와 사실만
-let scr = null, scrQi = 0, scrStage = 1, scrOn = new Set(), scrSortK = 'op', scrShown = 60;
+let scr = null, scrQi = 0, scrStage = 1, scrOn = new Set(), scrSortK = 'date', scrShown = 60;
+const LEV_T = '이익 레버리지 = 영업이익 증가율 ÷ 매출 증가율 (둘 다 전년 동기 대비). 2배면 매출보다 이익이 2배 빠르게 늘었다는 뜻. 흑자 전환은 계산할 수 없어 -';
+const isNew = x => scr.today > scr.since && x.in === scr.today;       // 첫 실행 날엔 전부 '오늘'이라 표시 안 함
+const isUpd = x => x.upd === scr.today;
 const won = v => v == null ? '-' : eok(v / 1e8);
 const isNum = v => typeof v === 'number';
 const lev = x => isNum(x.rev_yoy) && isNum(x.op_yoy) && x.rev_yoy > 0 ? x.op_yoy / x.rev_yoy : null;
@@ -546,7 +551,7 @@ function scrCard(x, last) {
   if (s2.err) return `<li><details class="ecard"><summary class="scr-s">
       <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small></span>
       <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span><span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
-      <span class="sv"><span class="k">배수</span><b>${lev(x) == null ? '-' : lev(x).toFixed(1) + '배'}</b></span><span class="sbs">${badge}</span></summary>
+      <span class="sv" title="${LEV_T}"><span class="k">이익 레버리지</span><b>${lev(x) == null ? '-' : lev(x).toFixed(1) + '배'}</b></span><span class="sbs">${badge}</span></summary>
     <div class="eb"><p class="mut">DART 접속이 끊겨 2차 자료를 아직 못 받았어요. 다음 정기 실행 때 이어서 받아요.</p></div></details></li>`;
   const lv = lev(x);
   const tRow = (lab, t, ok) => `<tr><th>${lab}</th>${yrs.map(y => `<td>${t?.[y] == null ? '-' : t[y].toFixed(2) + '회'}</td>`).join('')}
@@ -570,8 +575,8 @@ function scrCard(x, last) {
       <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}${x.src !== '보고서' ? `<small class="mk pre">${x.src}</small>` : ''}</span>
       <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span>
       <span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
-      <span class="sv"><span class="k">배수</span><b>${lv == null ? '-' : lv.toFixed(1) + '배'}</b></span>
-      <span class="sbs">${badge}</span></summary>
+      <span class="sv" title="${LEV_T}"><span class="k">이익 레버리지</span><b>${lv == null ? '-' : lv.toFixed(1) + '배'}</b></span>
+      <span class="sbs">${isNew(x) ? '<span class="sb new">새로</span>' : ''}${isUpd(x) ? `<span class="sb new">${x.was}→${x.src === '보고서' ? '확정치' : x.src}</span>` : ''}${scrSortK !== 'date' && x.d ? `<span class="sd">${x.d.slice(5).replace('-', '.')}</span>` : ''}${badge}</span></summary>
     <div class="eb">
       <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : x.src === '네이버' ? '네이버 증권 분기 실적 (DART 보고서를 아직 못 받아 보강)' : `스탁이지 잠정 실적 · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
       <div class="sc-tw"><table class="et"><thead><tr><th></th><th>이번 분기</th><th>YoY</th><th>QoQ</th></tr></thead><tbody>
@@ -609,10 +614,24 @@ function renderScr() {
     .map(([s, a, b]) => `<button type="button" data-s="${s}" class="${s === scrStage ? 'on' : ''}" aria-pressed="${s === scrStage}"><b>${a}</b> ${n(s)}곳<small>${b}${s > 1 && Q.unchecked ? ` · 미확인 ${Q.unchecked}곳 빠짐` : ''}</small></button>`).join('<span class="fa" aria-hidden="true">→</span>');
   let rows = all.filter(x => stageOk(x, scrStage) && [...scrOn].every(f => SF[f](x)));
   const K = {op: x => x.op_yoy === '흑자 전환' ? 1e9 : x.op_yoy, rev: x => x.rev_yoy, lev: x => lev(x) ?? (x.op_yoy === '흑자 전환' ? 1e9 : -1)};
-  rows = rows.slice().sort((a, b) => K[scrSortK](b) - K[scrSortK](a));
+  rows = rows.slice().sort(scrSortK === 'date'
+    ? (a, b) => (b.d || '').localeCompare(a.d || '') || K.op(b) - K.op(a)      // 공시일 최신순, 같은 날은 영업익 증가율
+    : (a, b) => K[scrSortK](b) - K[scrSortK](a));
   document.getElementById('scrSub').textContent = `${Q.q} · 전 상장사 ${Q.universe.toLocaleString('ko-KR')}곳 중 실적 확인 ${Q.filed.toLocaleString('ko-KR')}곳(보고서 ${Q.reported.toLocaleString('ko-KR')})${Q.unchecked ? ` · 2·3차 확인 못 함 ${Q.unchecked}곳` : ''} · 갱신 ${scr.updated}`;
   document.getElementById('scrCount').textContent = `${rows.length}곳`;
-  document.getElementById('scrList').innerHTML = rows.slice(0, scrShown).map(x => scrCard(x, scr.last_annual)).join('') || '<li class="empty">조건에 맞는 종목이 없어요</li>';
+  // 최근 공시순이면 공시일별로 묶는다 — 매일 새로 들어온 실적이 맨 위에
+  const dayN = {};
+  if (scrSortK === 'date') rows.forEach(x => { dayN[x.d] = (dayN[x.d] || 0) + 1; });
+  let html = '', day = null;
+  rows.slice(0, scrShown).forEach(x => {
+    if (scrSortK === 'date' && x.d !== day) {
+      day = x.d;
+      const nn = rows.filter(r => r.d === day && isNew(r)).length;
+      html += `<li class="feed-day">${day ? `${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})` : '날짜 없음'} · ${dayN[day]}곳${nn ? ` · 새로 ${nn}` : ''}</li>`;
+    }
+    html += scrCard(x, scr.last_annual);
+  });
+  document.getElementById('scrList').innerHTML = html || '<li class="empty">조건에 맞는 종목이 없어요</li>';
   const more = document.getElementById('scrMore');
   document.getElementById('scrBtns').hidden = rows.length <= scrShown;
   more.textContent = `더 보기 (${rows.length - scrShown}곳 남음)`;
@@ -639,6 +658,8 @@ fetch('data/screen.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null)
   // 제출 중인 분기에 보고서가 아직 적으면(전체의 절반 미만) 확정 분기를 먼저 보여준다
   const q0 = d.quarters[0];
   scrQi = q0.live && q0.reported < q0.universe / 2 && d.quarters[1] ? 1 : 0;
+  const nNew = d.quarters.reduce((s, q) => s + q.items.filter(isNew).length, 0);
+  document.getElementById('tnScr').textContent = nNew ? nNew : '';
   renderScr();
 }).catch(() => {});
 

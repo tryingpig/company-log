@@ -538,6 +538,8 @@ details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visibl
 .scr-list .sb.ok { color: var(--sig); background: var(--sig-bg); }
 .scr-list .sb.no { color: var(--muted); background: var(--bg); border: 1px solid var(--line); font-weight: 600; }
 .scr-list .mk.pre { color: var(--imp); border-color: var(--imp-line); }
+.scr-list .sb.new { color: var(--surface); background: var(--imp-line); }
+.scr-list .sd { font-size: 11px; color: var(--muted); align-self: center; font-variant-numeric: tabular-nums; }
 .scr-list .sl { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 4px; }
 .scr-list .sl .k { color: var(--muted); font-size: 12px; margin-right: 6px; }
 .scr-list .sl small { color: var(--muted); }
