@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261109d">
+<link rel="stylesheet" href="assets/style.css?v=20261109h">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -665,12 +665,13 @@ fetch('data/screen.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null)
 
 // 신호 뒤 결과: 신호일 종가 → 최근 종가 (사용자 요청 10-27)
 function afterCell(f) {
+  // 윗줄 = D+거래일 수 + 그 후 수익률, 아랫줄 = 시장 대비·20일선 (사용자 요청 11-09: 한 줄에 섞여 읽기 어려움)
   if (f.rnow == null) return '<span class="sv af"></span>';
-  if (!f.days) return '<span class="sv af"><span class="k">그 후</span><b class="mut">오늘 신호</b></span>';
+  if (!f.days) return '<span class="sv af" title="신호가 오늘 났어요"><span class="at"><span class="dd">D+0</span><b class="mut">오늘 신호</b></span></span>';
   const cls = v => v >= 0 ? 'pos' : 'neg';
-  return `<span class="sv af"><span class="k">그 후 ${f.days}일</span><b class="${cls(f.rnow)}">${sg(f.rnow)}%</b>` +
-    (f.xnow == null ? '' : `<span class="k"> · 시장 대비</span><b class="${cls(f.xnow)}">${sg(f.xnow)}%p</b>`) +
-    (f.ma20 == null ? '' : `<span class="ma ${f.ma20 ? 'on' : ''}">${f.ma20 ? '20일선 위' : '20일선 아래'}</span>`) + '</span>';
+  return `<span class="sv af" title="신호일 종가 → 최근 종가, ${f.days}거래일 뒤"><span class="at"><span class="dd">D+${f.days}</span><b class="${cls(f.rnow)}">${sg(f.rnow)}%</b></span>` +
+    `<span class="ax">${f.xnow == null ? '' : `시장 대비 <b class="${cls(f.xnow)}">${sg(f.xnow)}%p</b>`}` +
+    (f.ma20 == null ? '' : `<span class="ma ${f.ma20 ? 'on' : ''}">${f.ma20 ? '20일선 위' : '20일선 아래'}</span>`) + '</span></span>';
 }
 
 // 신호 성적표 + 추세 차트 (signal_stats.json, 매일 build.py가 누적 기록으로 다시 계산)

@@ -463,6 +463,13 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
 .tc { height: 110px; }
 .tc.tc-last { height: 130px; }
 .sig-list .sig-row { grid-template-columns: minmax(8em, 1.3fr) auto auto auto auto 1fr; }
+.sig-list .af { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; white-space: nowrap; }
+.sig-list .af .at { display: flex; align-items: center; gap: 6px; }
+.sig-list .af .dd { font-size: 11px; font-weight: 700; color: var(--text-2); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
+.sig-list .af .at > b { font-size: 14px; }
+.sig-list .af .ax { font-size: 12px; color: var(--muted); }
+.sig-list .af .ax b { font-size: 12px; }
+.sig-list .mk { white-space: nowrap; display: inline-block; }
 .sig-list .af .ma { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
 .sig-list .af .ma.on { color: var(--text-2); }
 .sig-list b.mut { color: var(--muted); font-weight: 600; }
