@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261109b">
+<link rel="stylesheet" href="assets/style.css?v=20261109c">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -53,10 +53,10 @@
         </ol>
         <p class="rl-n">3차 필수 · 2차 통과 종목</p>
         <ol class="rl">
-          <li><b>최근 5년 유상증자·CB(전환사채)·BW(신주인수권부사채) 발행 결정 공시 없음</b></li>
+          <li><b>최근 5년 유상증자·CB(전환사채)·BW(신주인수권부사채) 발행 결정 공시 없음</b> — DART 주요사항보고서(원천, 상장 전 포함) + 네이버 증권 공시 목록(보강), 정정·자회사 공시는 빼고 세요</li>
           <li>그 밖에 최대주주+특수관계인 지분율, 3년 배당, 자기주식 취득 결정, 연간 영업적자 연도, 부채 추세, 시장 대비 주가, 증권사 리포트 수는 걸러내지 않고 종목마다 보여줘요</li>
         </ol>
-        <p class="rl-n">실적은 DART 정기보고서(분기·반기·사업보고서) 기준이고, 보고서가 나오기 전엔 스탁이지 잠정 실적(시총 5,000억 이상)을 「잠정」으로 먼저 써요. 매일 정기 실행 때 다시 계산해요.</p>
+        <p class="rl-n">원천은 DART(정기보고서·재무제표)이고, 비는 곳만 보강해요 — 실적은 DART → 네이버 분기 실적(「네이버」) → 스탁이지 잠정 실적(시총 5,000억 이상, 「잠정」) 순서, 3차 공시 이력·배당은 네이버 증권. 출처는 종목마다 표시해요. 매일 정기 실행 때 다시 계산해요.</p>
       </details>
       <div class="seg" role="group" aria-label="분기" id="scrQ"></div>
       <div class="funnel" id="scrFunnel" role="group" aria-label="단계"></div>
@@ -69,7 +69,7 @@
         <button type="button" class="chip" data-f="fcf" aria-pressed="false">FCF +</button>
         <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
         <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
-        <button type="button" class="chip" data-f="rep" aria-pressed="false">보고서만 (잠정 제외)</button>
+        <button type="button" class="chip" data-f="rep" aria-pressed="false">DART 보고서만 (보강 자료 제외)</button>
       </div>
       <div class="seg" role="group" aria-label="정렬" id="scrSort">
         <button type="button" data-v="op" class="on" aria-pressed="true">영업익 증가율</button>
@@ -558,22 +558,22 @@ function scrCard(x, last) {
   const bad = (s3?.issues || []).filter(i => ['유상증자', 'CB', 'BW'].includes(i.k));
   const ho = s3?.holders;
   const divY = Object.keys(s3?.div || {}).sort();
-  const dart = r => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r}`;
   const s3html = !s3 ? '<p class="mut">2차를 통과한 종목만 확인해요</p>' : s3.err ? '<p class="mut">DART 접속이 끊겨 아직 못 받았어요. 다음 정기 실행 때 이어서 받아요.</p>' : `
       <ul class="sl">
-        <li><span class="k">유상증자·CB·BW (5년)</span> ${bad.length ? bad.map(i => `<a href="${dart(i.rcept)}" target="_blank" rel="noopener" class="neg">${i.k} ${i.d.slice(0, 4)}.${i.d.slice(4, 6)}</a>`).join(' · ') : '<b class="pos">결정 공시 없음</b>'}</li>
+        <li><span class="k">유상증자·CB·BW (5년)</span> ${bad.length ? bad.map(i => i.rcept ? `<a class="neg" href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${i.rcept}" target="_blank" rel="noopener" title="${esc(i.nm)}">${i.k} ${i.d.slice(0, 4)}.${i.d.slice(4, 6)}</a>`
+          : `<span class="neg" title="${esc(i.nm)}">${i.k} ${i.d.slice(0, 4)}.${i.d.slice(4, 6)}</span>`).join(' · ') + ` <a href="https://m.stock.naver.com/domestic/stock/${x.code}/disclosure" target="_blank" rel="noopener">공시 목록 ↗</a>` : '<b class="pos">결정 공시 없음</b>'}</li>
         <li><span class="k">최대주주+특수관계인 지분</span> ${ho == null ? '-' : `<b>${ho.toFixed(1)}%</b> ${ho >= 40 ? '<small>(40% 이상)</small>' : ho < 20 ? '<small class="neg">(20% 미만)</small>' : ''}`}</li>
-        <li><span class="k">주당 배당금 (보통주)</span> ${divY.length ? divY.map(y => `${y} ${s3.div[y] ? s3.div[y].toLocaleString('ko-KR') + '원' : '없음'}`).join(' · ') : '-'}</li>
-        <li><span class="k">자기주식 취득 결정 (5년)</span> ${s3.buyback ? `<b>${s3.buyback}회</b> <small>소각 여부는 따로 확인</small>` : '없음'}</li>
+        <li><span class="k">주당 배당금</span> ${divY.length ? divY.map(y => `${y} ${s3.div[y] ? s3.div[y].toLocaleString('ko-KR') + '원' : '없음'}`).join(' · ') : '-'}</li>
+        <li><span class="k">자기주식 취득 결정 (5년)</span> ${s3.buyback ? `<b>${s3.buyback}회</b>` : '없음'} <span class="k">· 주식 소각 결정</span> ${s3.burn ? `<b>${s3.burn}회</b>` : '없음'}</li>
       </ul>`;
   return `<li><details class="ecard"><summary class="scr-s">
-      <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}${x.src === '잠정' ? '<small class="mk pre">잠정</small>' : ''}</span>
+      <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}${x.src !== '보고서' ? `<small class="mk pre">${x.src}</small>` : ''}</span>
       <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span>
       <span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
       <span class="sv"><span class="k">배수</span><b>${lv == null ? '-' : lv.toFixed(1) + '배'}</b></span>
       <span class="sbs">${badge}</span></summary>
     <div class="eb">
-      <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : `스탁이지 잠정 실적 · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
+      <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : x.src === '네이버' ? '네이버 증권 분기 실적 (DART 보고서를 아직 못 받아 보강)' : `스탁이지 잠정 실적 · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
       <div class="sc-tw"><table class="et"><thead><tr><th></th><th>이번 분기</th><th>YoY</th><th>QoQ</th></tr></thead><tbody>
         <tr><th>매출</th><td>${won(x.rev)}</td><td>${pc(x.rev_yoy)}</td><td>${pc(x.rev_qoq)}</td></tr>
         <tr><th>영업이익</th><td>${won(x.op)}</td><td>${pc(x.op_yoy)}</td><td>${pc(x.op_qoq)}</td></tr></tbody></table></div>

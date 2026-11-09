@@ -208,6 +208,25 @@ def prelim(y, q):
     return out
 
 
+def naver_quarter(code, y, q):
+    """실적 캘린더가 받아 둔 네이버 분기 실적(raw/earnings/nv_*.json, 억원)에서 이 분기 확정치와 YoY·QoQ.
+    원천(DART 보고서)이 없을 때만 쓰는 보강 자료 — 추가 호출 없음."""
+    p = EARN_CACHE / f"nv_{code}.json"
+    if not p.exists():
+        return None
+    qs = json.loads(p.read_text(encoding="utf-8")).get("q") or {}
+    k = lambda yy, qq: f"{yy}{qq * 3:02d}"  # noqa: E731
+    cur = qs.get(k(y, q))
+    if not cur or cur.get("cons") or cur.get("rev") is None:
+        return None
+    ya = qs.get(k(y - 1, q)) or {}
+    pq = qs.get(k(y, q - 1) if q > 1 else k(y - 1, 4)) or {}
+    w = lambda v: v * 100_000_000 if v is not None else None  # noqa: E731
+    return {"rev": w(cur["rev"]), "op": w(cur.get("op")),
+            "rev_yoy": growth(cur["rev"], ya.get("rev")), "op_yoy": growth(cur.get("op"), ya.get("op")),
+            "rev_qoq": growth(cur["rev"], pq.get("rev")), "op_qoq": growth(cur.get("op"), pq.get("op"))}
+
+
 def first_pass(x):
     """1차: 매출 YoY ≥ 10%, 영업이익 YoY ≥ 10% 또는 흑자 전환, 최근 분기 영업이익 흑자."""
     ry, oy = x.get("rev_yoy"), x.get("op_yoy")
@@ -277,8 +296,44 @@ def turn_ok(t, last_y):
     return b >= a * TURN_DROP
 
 
-def issues(corp, today):
-    """5년 주요사항보고서 중 유상증자·CB·BW·EB·자기주식 취득 결정 (정정 공시는 뺌). 하루 1번."""
+NV_H = {"User-Agent": "Mozilla/5.0 (iPhone) Mobile", "Referer": "https://m.stock.naver.com/"}
+# 네이버 공시 목록(거래소 공시 제목) — DART 를 덜 부르려고 3차는 여기서 (2026-11-09 DART 차단 뒤 사용자 결정)
+ISSUE_PAT = (("유상증자", "유상증자결정"), ("CB", "전환사채권발행결정"), ("BW", "신주인수권부사채권발행결정"),
+             ("EB", "교환사채권발행결정"), ("자사주", "자기주식취득"), ("소각", "주식소각결정"))
+
+
+def naver_disclosures(code, today):
+    """네이버 공시 제목 5년치. 처음엔 끝까지, 그 뒤엔 하루 1번 앞 페이지부터 이미 받은 공시를 만날 때까지만."""
+    p = CACHE / f"nvdisc_{code}.json"
+    old = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"at": None, "items": []}
+    if old["at"] == today.isoformat():
+        return old["items"]
+    seen = {x["id"] for x in old["items"]}
+    cut = (today - timedelta(days=365 * ISSUE_YEARS)).isoformat()
+    new, page = [], 1
+    while page <= 15:
+        r = requests.get(f"https://m.stock.naver.com/api/stock/{code}/disclosure",
+                         params={"page": page, "pageSize": 100}, headers=NV_H, timeout=20)
+        r.raise_for_status()
+        rows = r.json() or []
+        time.sleep(0.2)
+        stop = not rows
+        for d in rows:
+            if d["disclosureId"] in seen or d["datetime"][:10] < cut:
+                stop = True
+                break
+            new.append({"id": d["disclosureId"], "d": d["datetime"][:10], "t": d["title"]})
+        if stop:
+            break
+        page += 1
+    items = [x for x in new + old["items"] if x["d"] >= cut]
+    p.write_text(json.dumps({"at": today.isoformat(), "items": items}, ensure_ascii=False), encoding="utf-8")
+    return items
+
+
+def dart_issues(corp, today):
+    """원천: DART 5년 주요사항보고서(유상증자·CB·BW·EB·자기주식 취득). 상장 전 공시도 있다(에이피알 2023 유증 —
+    네이버 목록엔 상장 뒤 것만). 주 1번만 새로 받고, DART 가 끊겨 있으면 받아 둔 기록을 쓴다."""
     def get():
         out, page = [], 1
         while True:
@@ -288,14 +343,38 @@ def issues(corp, today):
                 nm = r.get("report_nm", "")
                 if "정정" in nm[:8]:
                     continue
-                for k, pat in (("유상증자", "유상증자결정"), ("CB", "전환사채권발행결정"), ("BW", "신주인수권부사채권발행결정"),
-                               ("EB", "교환사채권발행결정"), ("자사주", "자기주식취득")):
+                for k, pat in ISSUE_PAT:
                     if pat in nm:
                         out.append({"k": k, "d": r["rcept_dt"], "nm": nm.replace("주요사항보고서", "").strip("()"), "rcept": r["rcept_no"]})
+                        break
             if page >= int(j.get("total_page") or 1):
                 return out
             page += 1
-    return cached(f"issues_{corp}", get, fresh_days=1)
+    try:
+        return cached(f"issues_{corp}", get, fresh_days=7)
+    except DartBlocked:
+        p = CACHE / f"issues_{corp}.json"
+        return json.loads(p.read_text(encoding="utf-8"))["v"] if p.exists() else None
+
+
+def issues(code, corp, today):
+    """5년 유상증자·CB·BW·EB 발행 결정, 자기주식 취득 결정, 주식소각 결정 = DART(원천) + 네이버 공시 제목(보강).
+    정정·자회사·종속회사 공시는 뺀다. 같은 종류·같은 날은 하나로."""
+    out = [{**i, "src": "DART"} for i in (dart_issues(corp, today) or [])]
+    for x in naver_disclosures(code, today):
+        t = x["t"]
+        if "정정" in t or "자회사" in t or "종속회사" in t:      # '(종속회사의 주요경영사항)' = 자회사 증자, 그 회사 것이 아님
+            continue
+        for k, pat in ISSUE_PAT:
+            if pat in t:
+                out.append({"k": k, "d": x["d"].replace("-", ""), "nm": t, "id": x["id"], "src": "네이버"})
+                break
+    seen, uniq = set(), []
+    for i in sorted(out, key=lambda i: i["d"], reverse=True):
+        if (i["k"], i["d"]) not in seen:
+            seen.add((i["k"], i["d"]))
+            uniq.append(i)
+    return uniq
 
 
 def holders(corp, y, reprt):
@@ -311,15 +390,22 @@ def holders(corp, y, reprt):
     return cached(f"holders_{corp}_{y}_{reprt}", get)
 
 
-def dividends(corp, y):
-    """사업보고서 기준 보통주 주당 현금배당금 {연도: 원}."""
+def dividends(code):
+    """네이버 연간 실적의 주당배당금 {연도: 원} — 확정 연도만(컨센서스 열은 뺀다). 7일 캐시."""
     def get():
-        rows = dart("alotMatter", corp_code=corp, bsns_year=str(y), reprt_code="11011").get("list", [])
-        r = next((r for r in rows if "주당 현금배당금" in r.get("se", "") and r.get("stock_knd") in ("보통주", None)), None)
-        if not r:
-            return {}
-        return {str(y - i): num(r.get(f)) for i, f in enumerate(("thstrm", "frmtrm", "lwfr"))}
-    return cached(f"div_{corp}_{y}", get)
+        r = requests.get(f"https://m.stock.naver.com/api/stock/{code}/finance/annual", headers=NV_H, timeout=20)
+        r.raise_for_status()
+        fi = r.json().get("financeInfo") or {}
+        keys = {t["key"]: t.get("isConsensus") == "Y" for t in fi.get("trTitleList") or []}
+        row = next((x for x in fi.get("rowList") or [] if x.get("title") == "주당배당금"), None)
+        out = {}
+        for k, cell in ((row or {}).get("columns") or {}).items():
+            if k in keys and not keys[k]:
+                v = (cell or {}).get("value", "").replace(",", "")
+                out[k[:4]] = int(float(v)) if re.fullmatch(r"-?\d+(\.\d+)?", v) else (0 if v in ("", "-") else None)
+        time.sleep(0.2)
+        return out
+    return cached(f"nvdiv_{code}", get, fresh_days=7)
 
 
 def rel(bars, mc, n):
@@ -358,6 +444,7 @@ def main():
         for corp in corps:
             code = code_of[corp]
             d, p = cur.get(corp), pre.get(code)
+            nv = None if d and d.get("rev") is not None else naver_quarter(code, y, q)
             if d and d.get("rev") is not None:
                 pv = prev.get(corp) or {}
                 same = pv.get("fs") == d["fs"]
@@ -365,6 +452,8 @@ def main():
                      "rev_yoy": growth(d["rev"], d["rev_y"]), "op_yoy": growth(d["op"], d["op_y"]),
                      "rev_qoq": growth(d["rev"], pv.get("rev")) if same else None,
                      "op_qoq": growth(d["op"], pv.get("op")) if same else None}
+            elif nv:                                               # 원천(DART) 없을 때 1순위 보강: 네이버 확정치
+                x = {"src": "네이버", **nv}
             elif p and p.get("rev") is not None:
                 x = {"src": "잠정", "d": p["d"], "rcept": p["rcept"], **{k: p[k] for k in ("rev", "op", "rev_yoy", "op_yoy", "rev_qoq", "op_qoq")}}
             else:
@@ -406,11 +495,22 @@ def main():
             return s2
 
         def third(x):
-            iss = issues(x["corp"], today)
+            try:
+                iss = issues(x["code"], x["corp"], today)          # DART(원천) + 네이버 공시 제목(보강)
+            except Exception as e:
+                return {"err": f"네이버 공시 목록 실패({type(e).__name__})", "pass": None}
             bad = [i for i in iss if i["k"] in ("유상증자", "CB", "BW")]
             hq = (y, REPRT[q]) if x["src"] == "보고서" else (last_y, "11011")
-            return {"issues": iss, "pass": not bad, "holders": holders(x["corp"], *hq),
-                    "div": dividends(x["corp"], last_y), "buyback": sum(i["k"] == "자사주" for i in iss)}
+            try:
+                ho = holders(x["corp"], *hq)                       # 지분율만 DART — 끊겨도 3차 판정은 한다
+            except DartBlocked:
+                ho = None
+            try:
+                dv = dividends(x["code"])
+            except Exception:
+                dv = {}
+            return {"issues": iss, "pass": not bad, "holders": ho, "div": dv,
+                    "buyback": sum(i["k"] == "자사주" for i in iss), "burn": sum(i["k"] == "소각" for i in iss)}
 
         def safe(fn):           # DART 가 끊기면 그 종목은 '확인 못 함'으로 두고 계속
             def run(x):
