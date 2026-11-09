@@ -116,6 +116,10 @@ header.top .meta { color: var(--muted); font-size: 13px; }
 .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 6px 0 14px; }
 .head h1 { font-size: 24px; margin: 0; letter-spacing: -0.02em; }
 .head .code { color: var(--muted); font-size: 14px; }
+.head .nv-link { font-size: 12px; font-weight: 600; color: var(--text-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 2px 8px; background: var(--surface); white-space: nowrap; text-decoration: none; }
+.head .nv-link:hover { color: var(--text); border-color: var(--muted); }
+.head .nv-link[hidden] { display: none; }
 .head .px { margin-left: auto; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .head .chg { font-size: 14px; font-variant-numeric: tabular-nums; }
 .pos { color: var(--up); } .neg { color: var(--down); }

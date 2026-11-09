@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261028a">
+<link rel="stylesheet" href="assets/style.css?v=20261109a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -25,6 +25,7 @@
 
   <div class="head">
     <h1 id="name">…</h1><span class="code" id="code"></span>
+    <a class="nv-link" id="nvLink" target="_blank" rel="noopener" hidden>네이버 증권 ↗</a>
     <span class="px" id="px"></span><span class="chg" id="chg"></span>
   </div>
 
@@ -721,6 +722,8 @@ function renderHead() {
   document.title = `${data.name} · Company Log`;
   document.getElementById('name').textContent = data.name;
   document.getElementById('code').textContent = data.code;
+  const nv = document.getElementById('nvLink');            // 네이버 증권 시세 화면으로 바로 (사용자 요청 11-09)
+  nv.href = `https://stock.naver.com/domestic/stock/${data.code}/price`; nv.hidden = false;
   const b = data.prices, n = b.length;
   if (n) {
     document.getElementById('px').textContent = fmt(b[n - 1].c) + '원';
