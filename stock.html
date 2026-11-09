@@ -21,7 +21,7 @@
 </head>
 <body>
 <div class="wrap">
-  <a class="back" href="./">← 종목 목록</a>
+  <a class="back" id="back" href="./">← 종목 목록</a>
 
   <div class="head">
     <h1 id="name">…</h1><span class="code" id="code"></span>
@@ -106,6 +106,16 @@
 </div>
 
 <script>
+// '← 종목 목록': 목록에서 들어왔으면 뒤로 가기(보던 탭·스크롤 유지), 아니면 마지막에 보던 탭으로 (사용자 요청 11-09)
+(() => {
+  const back = document.getElementById('back');
+  try { const t = sessionStorage.getItem('cl-tab'); if (t && t !== 'list') back.href = './#' + t; } catch (e) {}
+  back.addEventListener('click', e => {
+    let fromList = false;
+    try { const r = new URL(document.referrer); fromList = r.origin === location.origin && /\/(index\.html)?$/.test(r.pathname); } catch (_) {}
+    if (fromList && history.length > 1) { e.preventDefault(); history.back(); }
+  });
+})();
 const fmt = n => n == null ? '-' : n.toLocaleString('ko-KR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

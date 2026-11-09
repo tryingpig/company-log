@@ -313,6 +313,7 @@ function showTab(t) {
   if (!TABS.includes(t)) t = 'list';
   document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
   TABS.forEach(k => { document.getElementById('pane-' + k).hidden = k !== t; });
+  try { sessionStorage.setItem('cl-tab', t); } catch (e) {}     // 종목 페이지 '← 종목 목록'이 이 탭으로 돌아오게
   const h = t === 'list' ? '' : '#' + t;
   if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
 }
