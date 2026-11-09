@@ -103,6 +103,25 @@ def run_earnings():
     return None
 
 
+def run_screen():
+    """실적 스크리닝(screen.py, DART). 실패해도 나머지는 계속 — 문제 문장만 돌려준다."""
+    log("실적 스크리닝 시작")
+    try:
+        r = subprocess.run([PY39, str(ROOT / "tools" / "screen.py")], cwd=ROOT, capture_output=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        return "실적 스크리닝 1시간 넘게 걸려 중단 (기존 화면 유지)"
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace")
+    for ln in out.strip().splitlines()[-6:]:
+        log(f"  screen | {ln}")
+    if r.returncode == 4:
+        return "실적 스크리닝: DART 접속 끊김으로 1차 자료를 못 받음 (기존 화면 유지)"
+    if r.returncode == 2:
+        return "실적 스크리닝: DART 접속이 도중에 끊겨 일부 종목 2·3차 미확인 (다음 실행이 이어 받음)"
+    if r.returncode:
+        return f"실적 스크리닝 실패 (exit {r.returncode}) — " + (out.strip().splitlines() or [""])[-1][:200]
+    return None
+
+
 async def main_async():
     t0 = time.time()
     log("build 시작")
@@ -113,6 +132,7 @@ async def main_async():
     if r.returncode:
         raise RuntimeError(f"build.py 실패 (exit {r.returncode})")
     earn_problem = run_earnings()
+    scr_problem = run_screen()
     push("데이터 빌드")
 
     codes = an.targets(MIN_REPORTS)
@@ -128,7 +148,7 @@ async def main_async():
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")
-    problems = [earn_problem] if earn_problem else []
+    problems = [p for p in (earn_problem, scr_problem) if p]
     if st["stopped"]:
         problems.append(f"{MAX_HOURS}시간 안에 못 끝내고 멈춤 (다음 실행이 이어 감)")
     if st["summary_fail"]:

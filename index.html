@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261109a">
+<link rel="stylesheet" href="assets/style.css?v=20261109b">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -31,7 +31,56 @@
     <button type="button" role="tab" id="tab-flips" aria-controls="pane-flips" aria-selected="false" data-tab="flips">의견 전환 <span class="tn" id="tnFlips"></span></button>
     <button type="button" role="tab" id="tab-signals" aria-controls="pane-signals" aria-selected="false" data-tab="signals">거래량 신호 <span class="tn" id="tnSig" title="매수 우위"></span><span class="tn sell" id="tnSell" title="매도 우위"></span></button>
     <button type="button" role="tab" id="tab-earn" aria-controls="pane-earn" aria-selected="false" data-tab="earn">실적 캘린더 <span class="tn" id="tnEarn" title="오늘 발표"></span></button>
+    <button type="button" role="tab" id="tab-scr" aria-controls="pane-scr" aria-selected="false" data-tab="scr">실적 스크리닝</button>
   </nav>
+
+  <div role="tabpanel" id="pane-scr" aria-labelledby="tab-scr" hidden>
+    <section class="feed" aria-labelledby="scrHead">
+      <h2 class="feed-h" id="scrHead">실적 스크리닝 <span class="sub" id="scrSub"></span></h2>
+      <details class="sig-rule">
+        <summary class="rl-h">거르는 기준 — 1차 → 2차 → 3차 필수 순서로 좁혀요</summary>
+        <p class="rl-n" style="margin-top:0">1차 · 전 상장사(보통주)의 최근 분기 실적</p>
+        <ol class="rl">
+          <li><b>매출 YoY +10% 이상</b> 그리고 <b>영업이익 YoY +10% 이상</b>(또는 흑자 전환)</li>
+          <li><b>최근 분기 영업이익 흑자</b> — 적자 기업은 제외</li>
+          <li>QoQ는 같이 보여주고, 영업 레버리지(영업익 +20%·+30%, 매출 증가율의 2배)는 칩으로 골라 봐요</li>
+        </ol>
+        <p class="rl-n">2차 · 1차 통과 종목</p>
+        <ol class="rl">
+          <li><b>OCF(영업활동 현금흐름) +</b> — 올해 누적 기준(잠정 실적만 있는 종목은 최근 사업연도)</li>
+          <li>FCF(OCF − 유형자산 취득)는 걸러내지 않고 표시만, 「FCF +」 칩으로 골라 봐요</li>
+          <li><b>매출채권회전율·재고자산회전율</b>: 최근 3개 사업연도, 3년 전보다 10% 넘게 떨어지지 않음(재고가 없는 업종은 해당 없음)</li>
+        </ol>
+        <p class="rl-n">3차 필수 · 2차 통과 종목</p>
+        <ol class="rl">
+          <li><b>최근 5년 유상증자·CB(전환사채)·BW(신주인수권부사채) 발행 결정 공시 없음</b></li>
+          <li>그 밖에 최대주주+특수관계인 지분율, 3년 배당, 자기주식 취득 결정, 연간 영업적자 연도, 부채 추세, 시장 대비 주가, 증권사 리포트 수는 걸러내지 않고 종목마다 보여줘요</li>
+        </ol>
+        <p class="rl-n">실적은 DART 정기보고서(분기·반기·사업보고서) 기준이고, 보고서가 나오기 전엔 스탁이지 잠정 실적(시총 5,000억 이상)을 「잠정」으로 먼저 써요. 매일 정기 실행 때 다시 계산해요.</p>
+      </details>
+      <div class="seg" role="group" aria-label="분기" id="scrQ"></div>
+      <div class="funnel" id="scrFunnel" role="group" aria-label="단계"></div>
+      <div class="chips" id="scrChips">
+        <span class="lab">필터</span>
+        <button type="button" class="chip" data-f="op20" aria-pressed="false">영업익 +20%↑</button>
+        <button type="button" class="chip" data-f="op30" aria-pressed="false">영업익 +30%↑</button>
+        <button type="button" class="chip" data-f="lev2" aria-pressed="false">영업익 증가율 ≥ 매출 증가율 2배</button>
+        <button type="button" class="chip" data-f="qoq" aria-pressed="false">QoQ 매출·영업익 모두 증가</button>
+        <button type="button" class="chip" data-f="fcf" aria-pressed="false">FCF +</button>
+        <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
+        <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
+        <button type="button" class="chip" data-f="rep" aria-pressed="false">보고서만 (잠정 제외)</button>
+      </div>
+      <div class="seg" role="group" aria-label="정렬" id="scrSort">
+        <button type="button" data-v="op" class="on" aria-pressed="true">영업익 증가율</button>
+        <button type="button" data-v="rev" aria-pressed="false">매출 증가율</button>
+        <button type="button" data-v="lev" aria-pressed="false">레버리지 배수</button>
+      </div>
+      <p class="count" id="scrCount"></p>
+      <div class="panel"><ol class="feed-list earn-list scr-list" id="scrList"></ol>
+        <div class="feed-btns" id="scrBtns" hidden><button type="button" class="feed-more" id="scrMore">더 보기</button></div></div>
+    </section>
+  </div>
 
   <div role="tabpanel" id="pane-earn" aria-labelledby="tab-earn" hidden>
     <section class="feed" aria-labelledby="earnHead">
@@ -308,7 +357,7 @@ function edgeBadge(s) {
 }
 
 // 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 / 실적 캘린더 (주소 끝 #flips · #signals · #earn 으로 바로 열기)
-const TABS = ['list', 'flips', 'signals', 'earn'];
+const TABS = ['list', 'flips', 'signals', 'earn', 'scr'];
 function showTab(t) {
   if (!TABS.includes(t)) t = 'list';
   document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
@@ -476,6 +525,121 @@ fetch('data/earnings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : nul
   const n = earn.filter(x => x.date === today).length;
   document.getElementById('tnEarn').textContent = n ? n : '';
   renderEarn();
+}).catch(() => {});
+
+// 실적 스크리닝 (data/screen.json — tools/screen.py, 사용자 기준 11-09). 판단 문구 없이 기준 통과 여부와 사실만
+let scr = null, scrQi = 0, scrStage = 1, scrOn = new Set(), scrSortK = 'op', scrShown = 60;
+const won = v => v == null ? '-' : eok(v / 1e8);
+const isNum = v => typeof v === 'number';
+const lev = x => isNum(x.rev_yoy) && isNum(x.op_yoy) && x.rev_yoy > 0 ? x.op_yoy / x.rev_yoy : null;
+const SF = {
+  op20: x => x.op_yoy === '흑자 전환' || x.op_yoy >= 20, op30: x => x.op_yoy === '흑자 전환' || x.op_yoy >= 30,
+  lev2: x => x.op_yoy === '흑자 전환' || (lev(x) ?? 0) >= 2,
+  qoq: x => (isNum(x.rev_qoq) && x.rev_qoq > 0 || x.rev_qoq === '흑자 전환') && (isNum(x.op_qoq) && x.op_qoq > 0 || x.op_qoq === '흑자 전환'),
+  fcf: x => (x.s2?.fcf ?? -1) > 0, KOSPI: x => x.market === 'KOSPI', KOSDAQ: x => x.market === 'KOSDAQ', rep: x => x.src === '보고서',
+};
+const stageOk = (x, s) => s === 1 || (s === 2 ? x.s2?.pass : x.s2?.pass && x.s3?.pass);
+function scrCard(x, last) {
+  const s2 = x.s2 || {}, s3 = x.s3, yrs = [String(last - 2), String(last - 1), String(last)];
+  const sbad = (s, lab) => s.err ? `<span class="sb no">${lab} 확인 못 함</span>` : s.pass ? `<span class="sb ok">${lab} ✓</span>` : `<span class="sb no">${lab} ✕</span>`;
+  const badge = sbad(s2, '2차') + (s3 ? sbad(s3, '3차 필수') : '');
+  if (s2.err) return `<li><details class="ecard"><summary class="scr-s">
+      <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small></span>
+      <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span><span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
+      <span class="sv"><span class="k">배수</span><b>${lev(x) == null ? '-' : lev(x).toFixed(1) + '배'}</b></span><span class="sbs">${badge}</span></summary>
+    <div class="eb"><p class="mut">DART 접속이 끊겨 2차 자료를 아직 못 받았어요. 다음 정기 실행 때 이어서 받아요.</p></div></details></li>`;
+  const lv = lev(x);
+  const tRow = (lab, t, ok) => `<tr><th>${lab}</th>${yrs.map(y => `<td>${t?.[y] == null ? '-' : t[y].toFixed(2) + '회'}</td>`).join('')}
+    <td>${ok == null ? '<span class="mut">해당 없음</span>' : ok ? '<b class="pos">유사·상승</b>' : '<b class="neg">10%↑ 하락</b>'}</td></tr>`;
+  const cfY = Object.keys(s2.cf || {}).sort();
+  const yrsOp = Object.keys(s2.years || {}).sort();
+  const loss = yrsOp.filter(y => (s2.years[y].op ?? 1) <= 0);
+  const liab = yrsOp.filter(y => s2.years[y].liab != null);
+  const bad = (s3?.issues || []).filter(i => ['유상증자', 'CB', 'BW'].includes(i.k));
+  const ho = s3?.holders;
+  const divY = Object.keys(s3?.div || {}).sort();
+  const dart = r => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r}`;
+  const s3html = !s3 ? '<p class="mut">2차를 통과한 종목만 확인해요</p>' : s3.err ? '<p class="mut">DART 접속이 끊겨 아직 못 받았어요. 다음 정기 실행 때 이어서 받아요.</p>' : `
+      <ul class="sl">
+        <li><span class="k">유상증자·CB·BW (5년)</span> ${bad.length ? bad.map(i => `<a href="${dart(i.rcept)}" target="_blank" rel="noopener" class="neg">${i.k} ${i.d.slice(0, 4)}.${i.d.slice(4, 6)}</a>`).join(' · ') : '<b class="pos">결정 공시 없음</b>'}</li>
+        <li><span class="k">최대주주+특수관계인 지분</span> ${ho == null ? '-' : `<b>${ho.toFixed(1)}%</b> ${ho >= 40 ? '<small>(40% 이상)</small>' : ho < 20 ? '<small class="neg">(20% 미만)</small>' : ''}`}</li>
+        <li><span class="k">주당 배당금 (보통주)</span> ${divY.length ? divY.map(y => `${y} ${s3.div[y] ? s3.div[y].toLocaleString('ko-KR') + '원' : '없음'}`).join(' · ') : '-'}</li>
+        <li><span class="k">자기주식 취득 결정 (5년)</span> ${s3.buyback ? `<b>${s3.buyback}회</b> <small>소각 여부는 따로 확인</small>` : '없음'}</li>
+      </ul>`;
+  return `<li><details class="ecard"><summary class="scr-s">
+      <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}${x.src === '잠정' ? '<small class="mk pre">잠정</small>' : ''}</span>
+      <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span>
+      <span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
+      <span class="sv"><span class="k">배수</span><b>${lv == null ? '-' : lv.toFixed(1) + '배'}</b></span>
+      <span class="sbs">${badge}</span></summary>
+    <div class="eb">
+      <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : `스탁이지 잠정 실적 · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
+      <div class="sc-tw"><table class="et"><thead><tr><th></th><th>이번 분기</th><th>YoY</th><th>QoQ</th></tr></thead><tbody>
+        <tr><th>매출</th><td>${won(x.rev)}</td><td>${pc(x.rev_yoy)}</td><td>${pc(x.rev_qoq)}</td></tr>
+        <tr><th>영업이익</th><td>${won(x.op)}</td><td>${pc(x.op_yoy)}</td><td>${pc(x.op_qoq)}</td></tr></tbody></table></div>
+      <h3>2차 · 현금흐름·회전율</h3>
+      <ul class="sl">
+        <li><span class="k">OCF ${s2.cf_period ? '(' + s2.cf_period + ')' : ''}</span> ${s2.ocf == null ? '-' : `<b class="${s2.ocf > 0 ? 'pos' : 'neg'}">${won(s2.ocf)}</b>`}</li>
+        <li><span class="k">FCF (OCF − 유형자산 취득)</span> ${s2.fcf == null ? '-' : `<b class="${s2.fcf > 0 ? 'pos' : 'neg'}">${won(s2.fcf)}</b>`}</li>
+      </ul>
+      <div class="sc-tw"><table class="et"><thead><tr><th>회전율</th>${yrs.map(y => `<th>${y}</th>`).join('')}<th>3년 추세</th></tr></thead><tbody>
+        ${tRow('매출채권', s2.turn?.ar, s2.ar_ok)}${tRow('재고자산', s2.turn?.inv, s2.inv_ok)}</tbody></table></div>
+      ${cfY.length ? `<div class="sc-tw"><table class="et"><thead><tr><th>연간</th>${cfY.map(y => `<th>${y}</th>`).join('')}</tr></thead><tbody>
+        <tr><th>OCF</th>${cfY.map(y => `<td>${won(s2.cf[y].ocf)}</td>`).join('')}</tr>
+        <tr><th>FCF</th>${cfY.map(y => `<td>${won(s2.cf[y].fcf)}</td>`).join('')}</tr>
+        ${liab.length ? `<tr><th>부채총계</th>${cfY.map(y => `<td>${won(s2.years[y]?.liab)}</td>`).join('')}</tr>` : ''}</tbody></table></div>` : ''}
+      <h3>3차 · 필수 + 참고</h3>${s3html}
+      <ul class="sl">
+        <li><span class="k">연간 영업적자 (${yrsOp[0] || ''}~${yrsOp[yrsOp.length - 1] || ''})</span> ${!yrsOp.length ? '-' : loss.length ? `<b class="neg">${loss.join(' · ')}</b>` : '없음'}</li>
+        <li><span class="k">시장 대비 주가</span> 3개월 ${pc(x.px?.r3, '%p')} · 6개월 ${pc(x.px?.r6, '%p')}</li>
+        <li><span class="k">증권사 리포트 (3개월, company-log)</span> ${x.reports3 ? `<b>${x.reports3}건</b>` : '없음'}</li>
+      </ul>
+      <p class="el">${x.inlog ? `<a href="stock.html?code=${x.code}">company-log 종목 페이지 →</a>` : ''}
+        <a href="https://stock.naver.com/domestic/stock/${x.code}/price" target="_blank" rel="noopener">네이버 증권 ↗</a>
+        <a href="https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm=${encodeURIComponent(x.name)}" target="_blank" rel="noopener">DART 공시 ↗</a></p>
+    </div></details></li>`;
+}
+function renderScr() {
+  if (!scr) return;
+  const Q = scr.quarters[scrQi], all = Q.items;
+  document.getElementById('scrQ').innerHTML = scr.quarters.map((q, i) =>
+    `<button type="button" data-i="${i}" class="${i === scrQi ? 'on' : ''}" aria-pressed="${i === scrQi}">${q.q.slice(2)}${q.live ? ' · 제출 중' : ''}</button>`).join('');
+  const n = s => all.filter(x => stageOk(x, s)).length;
+  document.getElementById('scrFunnel').innerHTML = [[1, '1차', '실적 성장'], [2, '2차', '현금흐름·회전율'], [3, '3차 필수', '유증·CB·BW 없음']]
+    .map(([s, a, b]) => `<button type="button" data-s="${s}" class="${s === scrStage ? 'on' : ''}" aria-pressed="${s === scrStage}"><b>${a}</b> ${n(s)}곳<small>${b}${s > 1 && Q.unchecked ? ` · 미확인 ${Q.unchecked}곳 빠짐` : ''}</small></button>`).join('<span class="fa" aria-hidden="true">→</span>');
+  let rows = all.filter(x => stageOk(x, scrStage) && [...scrOn].every(f => SF[f](x)));
+  const K = {op: x => x.op_yoy === '흑자 전환' ? 1e9 : x.op_yoy, rev: x => x.rev_yoy, lev: x => lev(x) ?? (x.op_yoy === '흑자 전환' ? 1e9 : -1)};
+  rows = rows.slice().sort((a, b) => K[scrSortK](b) - K[scrSortK](a));
+  document.getElementById('scrSub').textContent = `${Q.q} · 전 상장사 ${Q.universe.toLocaleString('ko-KR')}곳 중 실적 확인 ${Q.filed.toLocaleString('ko-KR')}곳(보고서 ${Q.reported.toLocaleString('ko-KR')})${Q.unchecked ? ` · 2·3차 확인 못 함 ${Q.unchecked}곳` : ''} · 갱신 ${scr.updated}`;
+  document.getElementById('scrCount').textContent = `${rows.length}곳`;
+  document.getElementById('scrList').innerHTML = rows.slice(0, scrShown).map(x => scrCard(x, scr.last_annual)).join('') || '<li class="empty">조건에 맞는 종목이 없어요</li>';
+  const more = document.getElementById('scrMore');
+  document.getElementById('scrBtns').hidden = rows.length <= scrShown;
+  more.textContent = `더 보기 (${rows.length - scrShown}곳 남음)`;
+}
+document.getElementById('scrQ').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { scrQi = +b.dataset.i; scrShown = 60; renderScr(); } });
+document.getElementById('scrFunnel').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { scrStage = +b.dataset.s; scrShown = 60; renderScr(); } });
+document.getElementById('scrChips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  const f = b.dataset.f; scrOn.has(f) ? scrOn.delete(f) : scrOn.add(f);
+  if (f === 'KOSPI' && scrOn.has('KOSDAQ')) { scrOn.delete('KOSDAQ'); } if (f === 'KOSDAQ' && scrOn.has('KOSPI')) { scrOn.delete('KOSPI'); }
+  document.querySelectorAll('#scrChips .chip').forEach(c => c.setAttribute('aria-pressed', scrOn.has(c.dataset.f)));
+  scrShown = 60; renderScr();
+});
+document.getElementById('scrSort').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  scrSortK = b.dataset.v;
+  document.querySelectorAll('#scrSort button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+  renderScr();
+});
+document.getElementById('scrMore').onclick = () => { scrShown += 60; renderScr(); };
+fetch('data/screen.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
+  if (!d || !d.quarters?.length) return;
+  scr = d;
+  // 제출 중인 분기에 보고서가 아직 적으면(전체의 절반 미만) 확정 분기를 먼저 보여준다
+  const q0 = d.quarters[0];
+  scrQi = q0.live && q0.reported < q0.universe / 2 && d.quarters[1] ? 1 : 0;
+  renderScr();
 }).catch(() => {});
 
 // 신호 뒤 결과: 신호일 종가 → 최근 종가 (사용자 요청 10-27)
