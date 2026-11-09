@@ -79,6 +79,7 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+.wrap.wide { max-width: 1040px; }        /* 목록(탭) 화면 — 종목명이 줄바꿈되지 않게 넓힘 (사용자 요청 11-09) */
 
 header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 header.top h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
@@ -462,7 +463,8 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
 .tc-l i.k1 { border-top-color: var(--text-2); } .tc-l i.k2 { border-top-color: var(--muted); opacity: 1; }
 .tc { height: 110px; }
 .tc.tc-last { height: 130px; }
-.sig-list .sig-row { grid-template-columns: minmax(8em, 1.3fr) auto auto auto auto 1fr; }
+.sig-list .sig-row { grid-template-columns: minmax(14em, 1.3fr) auto auto auto auto 1fr; }
+.sig-list .sig-row .fn { white-space: nowrap; }
 .sig-list .af { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; white-space: nowrap; }
 .sig-list .af .at { display: flex; align-items: center; gap: 6px; }
 .sig-list .af .dd { font-size: 11px; font-weight: 700; color: var(--text-2); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
