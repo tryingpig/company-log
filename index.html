@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261110a">
+<link rel="stylesheet" href="assets/style.css?v=20261110b">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -449,6 +449,9 @@ document.getElementById('sigSeg').addEventListener('click', e => {
 const eok = v => { if (v == null) return '-'; const a = Math.abs(v), s = v < 0 ? '-' : '';
   if (a >= 10000) { const j = Math.floor(a / 10000), r = Math.round(a % 10000); return `${s}${j}조${r ? ' ' + r.toLocaleString('ko-KR') + '억' : ''}`; }
   return `${s}${Math.round(a).toLocaleString('ko-KR')}억`; };
+// 스탁이지 표기 '1조9070억' · '-312억' → 억 (숫자)
+const eokN = s => { const m = String(s ?? '').replace(/\s/g, '').match(/^(-)?(?:(\d+)조)?(?:([\d,]+)억)?$/);
+  if (!m || !(m[2] || m[3])) return null; const v = (+m[2] || 0) * 10000 + (+String(m[3] || '0').replace(/,/g, '')); return m[1] ? -v : v; };
 const pc = (v, u = '%') => v == null || Number.isNaN(v) ? '<span class="mut">-</span>'
   : typeof v === 'string' ? `<b class="${/흑자|축소/.test(v) ? 'pos' : 'neg'}">${v}</b>`      // 적자가 끼면 말로 (earnings.py growth)
   : `<b class="${v >= 0 ? 'pos' : 'neg'}">${sg(v)}${u}</b>`;
@@ -464,9 +467,13 @@ function earnCard(x) {
   const M = {rev: ['revenue', '매출'], op: ['operating_profit', '영업익'], net: ['net_profit', '순이익']};
   const estRows = Object.entries(M).map(([k, [rk, lab]]) => {
     const rm = r?.m?.[rk], num = s => { if (s == null || s === '') return null; const f = parseFloat(String(s).replace('%', '')); return Number.isNaN(f) ? String(s) : f; };
+    // 영업이익·순이익 옆에 매출 대비 이익률 (사용자 요청 11-10)
+    const mg = (v, rev) => k === 'rev' || v == null || !(rev > 0) ? ''
+      : ` <small class="mg" title="${k === 'op' ? '영업이익률' : '순이익률'} = ${lab} ÷ 매출">(${(v / rev * 100).toFixed(1)}%)</small>`;
+    const eM = e ? mg(e[k], e.rev) : '', rM = r ? mg(eokN(rm?.value), eokN(r.m?.revenue?.value)) : '';
     // 발표 뒤엔 전년·전분기 대비를 실제(잠정) 실적 기준으로
-    return r ? `<tr><th>${lab}</th><td>${e ? eok(e[k]) : '-'}</td><td>${rm?.value ? esc(rm.value) : '-'}</td><td>${pc(rm?.vs_estimate_pct)}</td><td>${pc(num(rm?.yoy))}</td><td>${pc(num(rm?.qoq))}</td></tr>`
-      : `<tr><th>${lab}</th><td>${e ? eok(e[k]) : '-'}</td><td>${e ? pc(e.yoy[k]) : '-'}</td><td>${e ? pc(e.qoq[k]) : '-'}</td></tr>`;
+    return r ? `<tr><th>${lab}</th><td>${e ? eok(e[k]) + eM : '-'}</td><td>${rm?.value ? esc(rm.value) + rM : '-'}</td><td>${pc(rm?.vs_estimate_pct)}</td><td>${pc(num(rm?.yoy))}</td><td>${pc(num(rm?.qoq))}</td></tr>`
+      : `<tr><th>${lab}</th><td>${e ? eok(e[k]) + eM : '-'}</td><td>${e ? pc(e.yoy[k]) : '-'}</td><td>${e ? pc(e.qoq[k]) : '-'}</td></tr>`;
   }).join('');
   const chips = [];
   if (p.x1w != null) chips.push(`<span class="ec">1주 시장 대비 ${pc(p.x1w, '%p')}</span>`);

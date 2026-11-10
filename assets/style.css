@@ -515,6 +515,7 @@ details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visibl
 .et b.pos { color: var(--up); } .et b.neg { color: var(--down); }
 .et tr.est th, .et tr.est td { background: var(--sig-bg); color: var(--sig); font-weight: 600; }
 .earn-list .mut, .et .mut { color: var(--muted); }
+.et .mg { color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }   /* 영업이익률·순이익률 */
 .earn-list .en { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .earn-list .en b.pos, .earn-list .er b.pos, .ecs b.pos { color: var(--up); } .earn-list .en b.neg, .earn-list .er b.neg, .ecs b.neg { color: var(--down); }
 .ecs { display: flex; flex-wrap: wrap; gap: 6px; }
