@@ -383,12 +383,13 @@ def holders(corp, y, reprt):
     """최대주주+특수관계인 지분율 합계(%)."""
     def get():
         rows = dart("hyslrSttus", corp_code=corp, bsns_year=str(y), reprt_code=reprt).get("list", [])
-        tot = [r for r in rows if r.get("nm") in ("계", "합계") and r.get("stock_knd") in ("보통주", "의결권 있는 주식", None)]
-        v = (tot or [r for r in rows if r.get("nm") in ("계", "합계")] or [None])[0]
-        try:
-            return float((v or {}).get("trmend_posesn_stock_qota_rt", "").replace(",", ""))
-        except ValueError:
-            return None
+        # 합계 줄 이름·주식 종류 표기가 회사마다 다름 — 안랩은 "합 계", 의결권 없는 주식 줄은 "-" (2026-11-10)
+        sp = lambda s: re.sub(r"\s", "", s or "")  # noqa: E731
+        pct = lambda r: sp(r.get("trmend_posesn_stock_qota_rt")).replace(",", "")  # noqa: E731
+        tot = [r for r in rows if sp(r.get("nm")) in ("계", "합계") and re.fullmatch(r"\d+(\.\d+)?", pct(r))]
+        rank = {"보통주": 0, "의결권있는주식": 1, "합계": 2}
+        tot.sort(key=lambda r: rank.get(sp(r.get("stock_knd")), 3))
+        return float(pct(tot[0])) if tot else None
     return cached(f"holders_{corp}_{y}_{reprt}", get)
 
 
