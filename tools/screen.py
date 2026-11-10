@@ -10,15 +10,27 @@ daily.py 가 실적 캘린더 다음에 실행한다 (Python39-32).
   3차  (2차 통과만) 필수 = 5년간 유상증자·CB·BW 결정 공시 없음. 표시만 = 최대주주+특수관계인 지분율, 3년 배당,
        5년 자기주식 취득 결정, 연간 적자 연도, 부채총계 추세, 4년 OCF·FCF, company-log 리포트 수, 시장 대비 주가.
 
+       + 경영진·지분·IR 사실(판정엔 안 씀): 대표이사·재직, 3년 대표/최대주주 변경, 6개월 임원·주요주주 매매,
+       5년 횡령·배임·불성실공시·관리종목, 1년 IR·잠정실적 공시 횟수.
+
+매일 흐름 (2026-11-10 사용자 요청: 실적 낸 회사만):
+  DART 공시 목록(시장 전체, 유형별 몇 페이지)로 지난 실행 뒤 접수된 것만 본다 — raw/screen/feed.json
+    정기보고서(분기·반기·사업, 정정 포함) → 그 회사만 주요계정 다시 받고 2차·3차 캐시 지움
+    영업(잠정)실적 → 스탁이지에 없는 종목은 공시 원문을 읽어 '잠정'으로
+    증자·CB·자사주 결정 / 임원·주요주주 소유상황보고서 → 그 회사 기록만 다시 받음
+  분기 주요계정은 raw/screen/acct_{연}_{분기}.json 에 쌓고, 진행 중 분기는 7일마다 전 종목을 한 번 더 받아 빠진 걸 메운다.
+
 DART 키 = telegram-report-bot/.env DART_API_KEY, 회사코드 = dart-financials 스킬 캐시.
-캐시 raw/screen/ — 확정된 보고서는 영구, 제출 기간 중인 분기는 하루 1번.
+캐시 raw/screen/ — 확정된 보고서는 영구.
 """
 import hashlib
+import io
 import json
 import re
 import sys
 import threading
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -27,6 +39,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build  # noqa: E402
+import earnings  # noqa: E402
 
 ROOT, DATA, KST = build.ROOT, build.DATA, build.KST
 ENV = Path(r"C:\ClaudeCode\telegram-report-bot\.env")
@@ -121,15 +134,16 @@ def quarters(today):
 
 # ── 1차: 전 종목 주요계정 ──────────────────────────────────────────────────────
 
-def multi(corps, y, q, live):
-    """{corp: {fs, rev, op, rev_prev, op_prev, rev_cum, op_cum}} — 분기 3개월 값(4분기는 연간), 전년 동기 값."""
+def multi(corps, y, q, live, fresh=False):
+    """{corp: {fs, rev, op, rev_prev, op_prev, rev_cum, op_cum}} — 분기 3개월 값(4분기는 연간), 전년 동기 값.
+    fresh=True 면 캐시 없이 바로 받는다(공시 목록에 새 보고서가 잡힌 회사만 넘어올 때)."""
     out = {}
     for i in range(0, len(corps), 100):
         part = corps[i:i + 100]
-        rows = cached(f"multi_{y}_{q}_{hashlib.md5(','.join(part).encode()).hexdigest()[:10]}",
-                      lambda: dart("fnlttMultiAcnt", corp_code=",".join(part), bsns_year=str(y),
-                                   reprt_code=REPRT[q]).get("list", []),
-                      fresh_days=1 if live else None)
+        get = lambda: dart("fnlttMultiAcnt", corp_code=",".join(part), bsns_year=str(y),  # noqa: E731
+                           reprt_code=REPRT[q]).get("list", [])
+        rows = get() if fresh else cached(f"multi_{y}_{q}_{hashlib.md5(','.join(part).encode()).hexdigest()[:10]}",
+                                          get, fresh_days=1 if live else None)
         for r in rows:
             nm = {"매출액": "rev", "영업이익": "op"}.get(r.get("account_nm"))
             if not nm:
@@ -149,13 +163,41 @@ def multi(corps, y, q, live):
     return out
 
 
-def quarter_values(corps, y, q, live):
+REBUILD_DAYS = 7     # 진행 중 분기는 공시 목록이 놓친 게 있어도 이 주기로 전 종목을 한 번 더 받는다(26번 호출)
+
+
+def accounts(corps, y, q, live, fd):
+    """분기 주요계정 저장본 raw/screen/acct_{y}_{q}.json. 처음 한 번(진행 중 분기는 7일마다)만 전 종목,
+    그 사이엔 공시 목록(feed)에 이 분기 보고서(정정 포함)가 새로 잡힌 회사만 다시 받는다 (사용자 요청 11-10)."""
+    p = CACHE / f"acct_{y}_{q}.json"
+    st = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    today = date.today()
+    cs = set(corps)
+    if st is None or (live and (today - date.fromisoformat(st["full"])).days >= REBUILD_DAYS):
+        if st:
+            done = st["done"]
+        else:                   # 진행 중 분기의 전 종목 값은 오늘 받은 것 — 어제까지 접수된 보고서는 이미 들어 있음
+            done = [f["rc"] for f in fd if live and f["ty"] == "A" and f.get("per") == [y, q] and f["d"] < today.strftime("%Y%m%d")]
+        st = {"full": today.isoformat(), "done": done, "v": multi(corps, y, q, live)}
+    new = [f for f in fd if f["ty"] == "A" and f.get("per") == [y, q] and f["corp"] in cs and f["rc"] not in st["done"]]
+    need = sorted({f["corp"] for f in new})
+    if need:
+        st["v"].update(multi(need, y, q, live, fresh=True))
+        for c in need:                         # 새 보고서·정정 → 그 보고서로 받은 2차·3차 자료도 다시 받게
+            for nm in ("full", "holders", "exctv2"):
+                (CACHE / f"{nm}_{c}_{y}_{REPRT[q]}.json").unlink(missing_ok=True)
+        st["done"] += [f["rc"] for f in new]
+    p.write_text(json.dumps(st, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    return st["v"], len(need)
+
+
+def quarter_values(corps, y, q, live, fd):
     """분기 3개월 값 {corp: {fs, rev, op, rev_y, op_y}}. 4분기 = 사업보고서 연간 − 3분기 누적."""
-    cur = multi(corps, y, q, live)
+    cur, _ = accounts(corps, y, q, live, fd)
     if q != 4:
         return {c: {"fs": d["fs"], "rev": d.get("rev"), "op": d.get("op"), "rev_y": d.get("rev_prev"), "op_y": d.get("op_prev"),
                     "rcept": d.get("rcept")} for c, d in cur.items()}
-    q3 = multi(corps, y, 3, False)
+    q3, _ = accounts(corps, y, 3, False, fd)
     out = {}
     for c, d in cur.items():
         b = q3.get(c) or {}
@@ -333,9 +375,9 @@ def naver_disclosures(code, today):
     return items
 
 
-def dart_issues(corp, today):
+def dart_issues(corp, today, fd):
     """원천: DART 5년 주요사항보고서(유상증자·CB·BW·EB·자기주식 취득). 상장 전 공시도 있다(에이피알 2023 유증 —
-    네이버 목록엔 상장 뒤 것만). 주 1번만 새로 받고, DART 가 끊겨 있으면 받아 둔 기록을 쓴다."""
+    네이버 목록엔 상장 뒤 것만). 공시 목록에 새 결정이 잡히면(늦어도 30일마다) 다시 받고, DART 가 끊겨 있으면 받아 둔 기록을 쓴다."""
     def get():
         out, page = [], 1
         while True:
@@ -352,17 +394,21 @@ def dart_issues(corp, today):
             if page >= int(j.get("total_page") or 1):
                 return out
             page += 1
+    p = CACHE / f"issues_{corp}.json"
+    if p.exists() and any(f["corp"] == corp and f["ty"] == "B" and f["d"] >= json.loads(p.read_text(encoding="utf-8"))["_at"].replace("-", "")
+                          for f in fd):
+        p.unlink()                              # 공시 목록에 새 증자·CB·자사주 결정이 잡힘 → 다시 받기
     try:
-        return cached(f"issues_{corp}", get, fresh_days=7)
+        return cached(f"issues_{corp}", get, fresh_days=30)
     except DartBlocked:
         p = CACHE / f"issues_{corp}.json"
         return json.loads(p.read_text(encoding="utf-8"))["v"] if p.exists() else None
 
 
-def issues(code, corp, today):
+def issues(code, corp, today, fd):
     """5년 유상증자·CB·BW·EB 발행 결정, 자기주식 취득 결정, 주식소각 결정 = DART(원천) + 네이버 공시 제목(보강).
     정정·자회사·종속회사 공시는 뺀다. 같은 종류·같은 날은 하나로."""
-    out = [{**i, "src": "DART"} for i in (dart_issues(corp, today) or [])]
+    out = [{**i, "src": "DART"} for i in (dart_issues(corp, today, fd) or [])]
     for x in naver_disclosures(code, today):
         t = x["t"]
         if "정정" in t or "자회사" in t or "종속회사" in t:      # '(종속회사의 주요경영사항)' = 자회사 증자, 그 회사 것이 아님
@@ -391,6 +437,194 @@ def holders(corp, y, reprt):
         tot.sort(key=lambda r: rank.get(sp(r.get("stock_knd")), 3))
         return float(pct(tot[0])) if tot else None
     return cached(f"holders_{corp}_{y}_{reprt}", get)
+
+
+# ── 공시 목록(feed): 지난 실행 이후 시장 전체 공시를 유형별로 몇 페이지만 받아, 실적·이벤트가 난 회사만 처리 ──────────
+
+FEED = CACHE / "feed.json"
+FEED_START = "2026-10-01"      # 처음 한 번은 이 날부터(3분기 잠정·보고서 시즌). 지분(D)은 오늘부터 — 매매 내역은 회사별로 따로 받음
+PERIOD = re.compile(r"(분기|반기|사업)보고서\s*\((\d{4})\.(\d{2})\)")
+INS_NM = "임원ㆍ주요주주특정증권등소유상황보고서"
+# 거래소 공시 제목 → 3차 '사실' 항목 (공백 뺀 제목 기준). 정정·자회사·종속회사·우선주 공시는 뺀다
+EVT = (("ceo", re.compile(r"대표이사(\(대표집행임원\))?변경")), ("owner", re.compile(r"최대주주변경(?!을수반)")),
+       ("ir", re.compile(r"기업설명회")), ("prelim", re.compile(r"영업\(잠정\)실적")),
+       ("embz", re.compile(r"횡령|배임")), ("unfair", re.compile(r"불성실공시법인지정(?!예고)")),
+       ("unfair_w", re.compile(r"불성실공시법인지정예고")), ("admin", re.compile(r"관리종목지정(?!우려|사유일부해제|해제)")))
+
+
+def evt_kind(title):
+    t = re.sub(r"\s", "", title)
+    if any(w in t for w in ("정정", "자회사", "종속회사", "우선주")):
+        return None
+    return next((k for k, pat in EVT if pat.search(t)), None)
+
+
+def per_of(d):
+    """잠정실적 공시일 'YYYYMMDD' → 그 직전에 끝난 분기 [연, 분기]."""
+    y, q = int(d[:4]), (int(d[4:6]) - 1) // 3
+    return [y - 1, 4] if q == 0 else [y, q]
+
+
+def feed(today, corp_set):
+    """[{rc, corp, d, ty, k, nm, per}] — A 정기보고서(per=보고 분기), B 증자·CB·자사주 결정, I 잠정실적·이벤트, D 임원·주요주주 매매.
+    유형마다 마지막으로 다 받은 날부터 오늘까지(그날은 겹쳐 받음). 끊기면 받은 데까지 두고 다음 실행이 이어 받는다."""
+    st = json.loads(FEED.read_text(encoding="utf-8")) if FEED.exists() else {"to": {}, "items": []}
+    have = {x["rc"] for x in st["items"]}
+    for ty in "ABID":
+        start = date.fromisoformat(st["to"].get(ty) or (today.isoformat() if ty == "D" else FEED_START))
+        start = max(start, today - timedelta(days=89))          # 회사 지정 없는 목록은 최대 3개월
+        page = 1
+        while True:
+            j = dart("list", bgn_de=start.strftime("%Y%m%d"), end_de=today.strftime("%Y%m%d"), pblntf_ty=ty,
+                     page_no=str(page), page_count="100")
+            for r in j.get("list", []):
+                rc, corp, nm = r["rcept_no"], r.get("corp_code"), r.get("report_nm", "")
+                if rc in have or corp not in corp_set:
+                    continue
+                x = {"rc": rc, "corp": corp, "d": r["rcept_dt"], "ty": ty, "nm": re.sub(r"\s+", " ", nm).strip()}
+                if ty == "A":
+                    m = PERIOD.search(nm)
+                    if not m:
+                        continue
+                    x["per"] = [int(m.group(2)), int(m.group(3)) // 3]
+                elif ty == "B":
+                    k = next((k for k, pat in ISSUE_PAT if pat in nm and "정정" not in nm[:8]), None)
+                    if not k:
+                        continue
+                    x["k"] = k
+                elif ty == "I":
+                    k = evt_kind(nm)
+                    if not k:
+                        continue
+                    x["k"] = k
+                    if k == "prelim":
+                        x["per"] = per_of(r["rcept_dt"])
+                elif INS_NM not in re.sub(r"\s", "", nm):
+                    continue
+                st["items"].append(x)
+                have.add(rc)
+            if page >= int(j.get("total_page") or 1):
+                break
+            page += 1
+        st["to"][ty] = today.isoformat()
+        FEED.write_text(json.dumps(st, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    return st["items"]
+
+
+def doc_prelim(rc):
+    """영업(잠정)실적 공시 원문 → {rev|op|net: {cur, prev, yago}}(억원). 실적 캘린더와 같은 파서·같은 영구 캐시."""
+    p = earnings.CACHE / f"dart_{rc}.json"
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    with LOCK:
+        time.sleep(max(0.0, LAST[0] + GAP - time.time()))
+        try:
+            r = requests.get(f"{DART}/document.xml", params={"crtfc_key": key(), "rcept_no": rc}, timeout=30)
+        finally:
+            LAST[0] = time.time()
+    if r.content[:2] != b"PK":
+        return None
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    got = earnings.dart_parse(z.read(z.namelist()[0]).decode("utf-8", "ignore"))
+    if got:
+        p.write_text(json.dumps(got, ensure_ascii=False), encoding="utf-8")
+    return got
+
+
+def dart_prelim(y, q, fd, code_of, skip):
+    """공시 목록의 이 분기 잠정실적 원문 {stock_code: prelim 모양}. 연결 기준 공시 우선, 같은 기준이면 나중 것.
+    skip = 보고서가 이미 있거나 스탁이지가 숫자를 준 종목 — 원문을 다시 읽지 않는다(호출 줄이기)."""
+    pick = {}
+    for f in sorted((f for f in fd if f.get("k") == "prelim" and f.get("per") == [y, q]), key=lambda f: f["rc"]):
+        cons = "연결" in f["nm"]
+        old = pick.get(f["corp"])
+        if old is None or cons or not old[1]:
+            pick[f["corp"]] = (f, cons)
+    out = {}
+    for corp, (f, _) in pick.items():
+        code = code_of.get(corp)
+        if not code or code in skip:
+            continue
+        try:
+            g = doc_prelim(f["rc"])
+        except DartBlocked:
+            raise
+        except Exception:
+            g = None
+        if not g:
+            continue
+        w = lambda v: v * 100_000_000 if v is not None else None  # noqa: E731
+        rv, op = g["rev"], g["op"]
+        out[code] = {"rev": w(rv["cur"]), "op": w(op["cur"]), "rev_yoy": growth(rv["cur"], rv["yago"]),
+                     "op_yoy": growth(op["cur"], op["yago"]), "rev_qoq": growth(rv["cur"], rv["prev"]),
+                     "op_qoq": growth(op["cur"], op["prev"]), "d": f"{f['d'][:4]}-{f['d'][4:6]}-{f['d'][6:]}",
+                     "rcept": f["rc"], "via": "DART"}
+    return out
+
+
+def events(code, corp, today, fd):
+    """경영진·IR 사실: 네이버 공시 제목 5년치(보강) + 공시 목록(DART 원천)의 거래소 공시. 같은 종류·같은 날은 하나."""
+    got = {(f["k"], f["d"]) for f in fd if f["corp"] == corp and f["ty"] == "I"}
+    for x in naver_disclosures(code, today):
+        k = evt_kind(x["t"])
+        if k:
+            got.add((k, x["d"].replace("-", "")))
+    ago = lambda n: (today - timedelta(days=365 * n)).strftime("%Y%m%d")  # noqa: E731
+    cnt = lambda k, n: sum(1 for kk, d in got if kk == k and d >= ago(n))  # noqa: E731
+    last = lambda k: max((d for kk, d in got if kk == k), default=None)  # noqa: E731
+    return {"ceo3": cnt("ceo", 3), "owner3": cnt("owner", 3), "ir1": cnt("ir", 1), "prelim1": cnt("prelim", 1),
+            "embz5": cnt("embz", 5), "unfair5": cnt("unfair", 5), "unfair_w5": cnt("unfair_w", 5), "admin5": cnt("admin", 5),
+            "last": {k: last(k) for k in ("embz", "unfair", "unfair_w", "admin") if last(k)}}
+
+
+def tenure_since(pd, today):
+    """임원 현황 재직기간 → 'YYYY.MM'. 회사마다 '2013.12~현재' · '80.01.01 ~ 現' · '16개월' · '0년 4개월' 로 다르게 적는다."""
+    pd = pd or ""
+    m = re.match(r"\s*(\d{4})\.(\d{1,2})", pd)
+    if m:
+        return f"{m.group(1)}.{int(m.group(2)):02d}"
+    m = re.match(r"\s*(\d{2})\.(\d{1,2})\.\d{1,2}", pd)
+    if m:
+        yy = int(m.group(1))
+        return f"{1900 + yy if yy >= 50 else 2000 + yy}.{int(m.group(2)):02d}"
+    m = re.fullmatch(r"\s*(?:(\d+)\s*년)?\s*(?:(\d+)\s*개월)?\s*", pd)
+    if m and (m.group(1) or m.group(2)):
+        n = int(m.group(1) or 0) * 12 + int(m.group(2) or 0)
+        k = today.year * 12 + today.month - 1 - n
+        return f"{k // 12}.{k % 12 + 1:02d}"
+    return None
+
+
+def exctv(corp, y, reprt, today):
+    """정기보고서 임원 현황 → 대표이사 [{nm, since}]. 직위('부회장')가 아니라 담당업무에 '대표이사'라고 적는 회사도 있다(삼성전자).
+    since = 그 회사 재직 시작(대표 취임일이 아님)."""
+    rows = cached(f"exctv2_{corp}_{y}_{reprt}", lambda: [
+        {k: r.get(k) for k in ("nm", "ofcps", "chrg_job", "hffc_pd")}
+        for r in dart("exctvSttus", corp_code=corp, bsns_year=str(y), reprt_code=reprt).get("list", [])])
+    return [{"nm": r["nm"], "since": tenure_since(r.get("hffc_pd"), today)} for r in rows
+            if "대표" in (r.get("ofcps") or "") or "대표이사" in (r.get("chrg_job") or "")]
+
+
+INS_MONTHS = 6
+
+
+def insiders(corp, today, fd):
+    """임원·주요주주 매매(elestock) 최근 6개월: 늘린 보고·줄인 보고 수, 지분율 증감 합(%p).
+    받아 둔 뒤 공시 목록에 그 회사 소유상황보고서가 새로 잡혔을 때만 다시 받는다."""
+    p = CACHE / f"ins_{corp}.json"
+    old = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    if old is None or any(f["corp"] == corp and f["ty"] == "D" and f["d"] >= old["_at"].replace("-", "") for f in fd):
+        cut = (today - timedelta(days=365 * 3)).isoformat()
+        rows = [{"d": r["rcept_dt"], "nm": r.get("repror"), "who": r.get("isu_exctv_ofcps") if r.get("isu_exctv_ofcps") not in (None, "-")
+                 else r.get("isu_main_shrholdr"), "n": num(r.get("sp_stock_lmp_irds_cnt")),
+                 "pp": float(r["sp_stock_lmp_irds_rate"].replace(",", "")) if re.fullmatch(r"-?[\d.,]+", r.get("sp_stock_lmp_irds_rate") or "") else None}
+                for r in dart("elestock", corp_code=corp).get("list", []) if (r.get("rcept_dt") or "") >= cut]
+        old = {"_at": today.isoformat(), "v": rows}
+        p.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+    cut = (today - timedelta(days=30 * INS_MONTHS)).isoformat()
+    rec = [r for r in old["v"] if r["d"] >= cut and r["n"]]
+    return {"up": sum(r["n"] > 0 for r in rec), "down": sum(r["n"] < 0 for r in rec),
+            "pp": round(sum(r["pp"] or 0 for r in rec), 2), "last": max((r["d"] for r in rec), default=None)}
 
 
 def dividends(code):
@@ -436,15 +670,27 @@ def main():
     rpath = CACHE / "seen.json"
     reg = json.loads(rpath.read_text(encoding="utf-8")) if rpath.exists() else {"since": today.isoformat(), "q": {}}
     out_q = []
+    try:
+        fd = feed(today, set(corps))
+    except DartBlocked:
+        fd = json.loads(FEED.read_text(encoding="utf-8"))["items"] if FEED.exists() else []
+    nf = lambda ty: sum(f["ty"] == ty and f["d"] == today.strftime("%Y%m%d") for f in fd)  # noqa: E731
+    print(f"공시 목록 {len(fd)}건 저장 · 오늘 정기보고서 {nf('A')} · 거래소 {nf('I')} · 지분 {nf('D')}")
     for y, q, live in quarters(today):
         py, pq = (y, q - 1) if q > 1 else (y - 1, 4)
         try:
-            cur = quarter_values(corps, y, q, live)
-            prev = quarter_values(corps, py, pq, False)
+            cur = quarter_values(corps, y, q, live, fd)
+            prev = quarter_values(corps, py, pq, False, fd)
         except DartBlocked as e:
             print(f"DART_BLOCKED {e} — 1차 자료를 못 받아 기존 screen.json 유지")
             sys.exit(4)
-        pre = prelim(y, q)
+        pre = prelim(y, q)                                         # 스탁이지(시총 5천억↑)
+        has = {code_of[c] for c, d in cur.items() if d.get("rev") is not None and c in code_of}
+        try:                                                       # 그 밖의 잠정실적은 DART 공시 원문으로
+            dpre = dart_prelim(y, q, fd, code_of, has | set(pre))
+        except DartBlocked:
+            dpre = {}
+        pre.update(dpre)
         rows = []
         for corp in corps:
             code = code_of[corp]
@@ -462,7 +708,8 @@ def main():
             elif nv:                                               # 원천(DART) 없을 때 1순위 보강: 네이버 확정치
                 x = {"src": "네이버", **nv}
             elif p and p.get("rev") is not None:
-                x = {"src": "잠정", "d": p["d"], "rcept": p["rcept"], **{k: p[k] for k in ("rev", "op", "rev_yoy", "op_yoy", "rev_qoq", "op_qoq")}}
+                x = {"src": "잠정", "d": p["d"], "rcept": p["rcept"], "via": p.get("via", "스탁이지"),
+                     **{k: p[k] for k in ("rev", "op", "rev_yoy", "op_yoy", "rev_qoq", "op_qoq")}}
             else:
                 continue
             x.update(code=code, name=stocks[code]["name"], market=stocks[code]["market"], corp=corp)
@@ -478,7 +725,8 @@ def main():
                 s.update(src=x["src"], upd=today.isoformat(), was=s["src"])
             x["in"], x["upd"], x["was"] = s["in"], s.get("upd"), s.get("was")
             x["d"] = x.get("d") or s["in"]
-        print(f"{y}.{q}Q {'진행 중' if live else '확정'}: 실적 {len(rows)}곳(보고서 {sum(x['src'] == '보고서' for x in rows)}) · 1차 {len(passed)}")
+        print(f"{y}.{q}Q {'진행 중' if live else '확정'}: 실적 {len(rows)}곳(보고서 {sum(x['src'] == '보고서' for x in rows)}"
+              f" · 잠정 {sum(x['src'] == '잠정' for x in rows)}, 그중 DART 원문 {sum(x.get('via') == 'DART' for x in rows)}) · 1차 {len(passed)}")
 
         # 2차
         def second(x):
@@ -513,7 +761,8 @@ def main():
 
         def third(x):
             try:
-                iss = issues(x["code"], x["corp"], today)          # DART(원천) + 네이버 공시 제목(보강)
+                iss = issues(x["code"], x["corp"], today, fd)      # DART(원천) + 네이버 공시 제목(보강)
+                ev = events(x["code"], x["corp"], today, fd)       # 경영진·IR 사실 (판정엔 안 씀, 표시·칩)
             except Exception as e:
                 return {"err": f"네이버 공시 목록 실패({type(e).__name__})", "pass": None}
             bad = [i for i in iss if i["k"] in ("유상증자", "CB", "BW")]
@@ -523,10 +772,18 @@ def main():
             except DartBlocked:
                 ho = None
             try:
+                ceo = exctv(x["corp"], *hq, today)
+            except DartBlocked:
+                ceo = None
+            try:
+                ins = insiders(x["corp"], today, fd)
+            except DartBlocked:
+                ins = None
+            try:
                 dv = dividends(x["code"])
             except Exception:
                 dv = {}
-            return {"issues": iss, "pass": not bad, "holders": ho, "div": dv,
+            return {"issues": iss, "pass": not bad, "holders": ho, "div": dv, "ev": ev, "ceo": ceo, "ins": ins,
                     "buyback": sum(i["k"] == "자사주" for i in iss), "burn": sum(i["k"] == "소각" for i in iss)}
 
         def safe(fn):           # DART 가 끊기면 그 종목은 '확인 못 함'으로 두고 계속

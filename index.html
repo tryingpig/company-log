@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261109i">
+<link rel="stylesheet" href="assets/style.css?v=20261110a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -71,6 +71,9 @@
         <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
         <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
         <button type="button" class="chip" data-f="rep" aria-pressed="false">DART 보고서만 (보강 자료 제외)</button>
+        <button type="button" class="chip" data-f="ir" aria-pressed="false" title="최근 1년 기업설명회(IR) 개최 공시가 있는 종목 (3차 대상만)">IR 개최 (1년)</button>
+        <button type="button" class="chip" data-f="nosell" aria-pressed="false" title="최근 6개월 임원·주요주주 소유상황 보고에 줄인 보고가 없는 종목 (3차 대상만)">임원·대주주 매도 없음 (6개월)</button>
+        <button type="button" class="chip" data-f="clean" aria-pressed="false" title="5년간 횡령·배임, 불성실공시법인 지정, 관리종목 지정 공시가 없는 종목 (3차 대상만)">경고 공시 없음 (5년)</button>
       </div>
       <div class="seg" role="group" aria-label="정렬" id="scrSort">
         <button type="button" data-v="date" class="on" aria-pressed="true">최근 공시순</button>
@@ -541,8 +544,34 @@ const SF = {
   op20: x => x.op_yoy === '흑자 전환' || x.op_yoy >= 20, op30: x => x.op_yoy === '흑자 전환' || x.op_yoy >= 30,
   lev2: x => x.op_yoy === '흑자 전환' || (lev(x) ?? 0) >= 2,
   qoq: x => (isNum(x.rev_qoq) && x.rev_qoq > 0 || x.rev_qoq === '흑자 전환') && (isNum(x.op_qoq) && x.op_qoq > 0 || x.op_qoq === '흑자 전환'),
+  ir: x => (x.s3?.ev?.ir1 ?? 0) > 0, nosell: x => x.s3?.ins != null && x.s3.ins.down === 0, clean: x => x.s3?.ev != null && !warnN(x.s3.ev),
   fcf: x => (x.s2?.fcf ?? -1) > 0, KOSPI: x => x.market === 'KOSPI', KOSDAQ: x => x.market === 'KOSDAQ', rep: x => x.src === '보고서',
 };
+const warnN = ev => (ev.embz5 || 0) + (ev.unfair5 || 0) + (ev.admin5 || 0);
+const ym = d => d ? `${d.slice(0, 4)}.${d.slice(4, 6)}` : '';
+function factHtml(x) {             // 경영진·지분·IR — DART·네이버 공시로 센 사실만, 통과/탈락 판정엔 안 씀
+  const s3 = x.s3;
+  if (!s3 || s3.err || !s3.ev) return '';
+  const ev = s3.ev, ins = s3.ins, now = new Date(scr.today + 'T00:00:00');
+  const ceo = (s3.ceo || []).map(c => {
+    if (!c.since) return esc(c.nm);
+    const yrs = (now - new Date(c.since.replace('.', '-') + '-01T00:00:00')) / 31557600000;
+    return `${esc(c.nm)} <small class="mut" title="그 회사 재직 시작 (대표 취임일이 아닐 수 있어요)">${c.since}~ 재직 · ${yrs < 1 ? '1년 미만' : Math.floor(yrs) + '년'}</small>`;
+  });
+  const cnt = (n, unit = '회') => n ? `<b>${n}${unit}</b>` : '없음';
+  const warn = [['embz', '횡령·배임'], ['unfair', '불성실공시법인 지정'], ['admin', '관리종목 지정']].filter(([k]) => ev[k + '5'])
+    .map(([k, lab]) => `<b class="neg">${lab} ${ev[k + '5']}회</b> <small class="mut">최근 ${ym(ev.last[k])}</small>`);
+  const insT = ins == null ? '-' : !(ins.up + ins.down) ? '보고 없음'
+    : `늘림 <b>${ins.up}건</b> · 줄임 <b class="${ins.down ? 'neg' : ''}">${ins.down}건</b> · 지분율 합계 <b class="${ins.pp > 0 ? 'pos' : ins.pp < 0 ? 'neg' : ''}">${ins.pp > 0 ? '+' : ''}${ins.pp.toFixed(2)}%p</b>`;
+  return `<h3>경영진·지분·IR <small>공시로 센 사실 · 통과 판정엔 안 써요</small></h3>
+      <ul class="sl">
+        <li><span class="k">대표이사</span> ${ceo.length ? ceo.join(' · ') : '-'} <span class="k">· 3년간 대표 변경</span> ${cnt(ev.ceo3)}</li>
+        <li><span class="k">최대주주 변경 (3년)</span> ${ev.owner3 ? `<b class="neg">${ev.owner3}회</b>` : '없음'}</li>
+        <li><span class="k">임원·주요주주 매매 (6개월)</span> ${insT}</li>
+        <li><span class="k">횡령·배임·불성실공시·관리종목 (5년)</span> ${warn.length ? warn.join(' · ') : '<b class="pos">공시 없음</b>'}${ev.unfair_w5 ? ` <small class="mut">· 지정 예고 ${ev.unfair_w5}회</small>` : ''}</li>
+        <li><span class="k">IR 개최 (1년)</span> ${cnt(ev.ir1)} <span class="k">· 잠정실적 공시 (1년)</span> ${cnt(ev.prelim1)}</li>
+      </ul>`;
+}
 const stageOk = (x, s) => s === 1 || (s === 2 ? x.s2?.pass : x.s2?.pass && x.s3?.pass);
 function scrCard(x, last) {
   const s2 = x.s2 || {}, s3 = x.s3, yrs = [String(last - 2), String(last - 1), String(last)];
@@ -576,9 +605,9 @@ function scrCard(x, last) {
       <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span>
       <span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
       <span class="sv" title="${LEV_T}"><span class="k">이익 레버리지</span><b>${lv == null ? '-' : lv.toFixed(1) + '배'}</b></span>
-      <span class="sbs">${isNew(x) ? '<span class="sb new">새로</span>' : ''}${isUpd(x) ? `<span class="sb new">${x.was}→${x.src === '보고서' ? '확정치' : x.src}</span>` : ''}${scrSortK !== 'date' && x.d ? `<span class="sd">${x.d.slice(5).replace('-', '.')}</span>` : ''}${badge}</span></summary>
+      <span class="sbs">${isNew(x) ? '<span class="sb new">새로</span>' : ''}${isUpd(x) ? `<span class="sb new">${x.was}→${x.src === '보고서' ? '확정치' : x.src}</span>` : ''}${x.s3?.ev && warnN(x.s3.ev) ? '<span class="sb no" title="5년 안에 횡령·배임·불성실공시·관리종목 공시가 있어요">⚠ 경고 공시</span>' : ''}${scrSortK !== 'date' && x.d ? `<span class="sd">${x.d.slice(5).replace('-', '.')}</span>` : ''}${badge}</span></summary>
     <div class="eb">
-      <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : x.src === '네이버' ? '네이버 증권 분기 실적 (DART 보고서를 아직 못 받아 보강)' : `스탁이지 잠정 실적 · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
+      <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : x.src === '네이버' ? '네이버 증권 분기 실적 (DART 보고서를 아직 못 받아 보강)' : `${x.via === 'DART' ? 'DART 잠정실적 공시 원문' : '스탁이지 잠정 실적'} · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
       <div class="sc-tw"><table class="et"><thead><tr><th></th><th>이번 분기</th><th>YoY</th><th>QoQ</th></tr></thead><tbody>
         <tr><th>매출</th><td>${won(x.rev)}</td><td>${pc(x.rev_yoy)}</td><td>${pc(x.rev_qoq)}</td></tr>
         <tr><th>영업이익</th><td>${won(x.op)}</td><td>${pc(x.op_yoy)}</td><td>${pc(x.op_qoq)}</td></tr></tbody></table></div>
@@ -593,7 +622,7 @@ function scrCard(x, last) {
         <tr><th>OCF</th>${cfY.map(y => `<td>${won(s2.cf[y].ocf)}</td>`).join('')}</tr>
         <tr><th>FCF</th>${cfY.map(y => `<td>${won(s2.cf[y].fcf)}</td>`).join('')}</tr>
         ${liab.length ? `<tr><th>부채총계</th>${cfY.map(y => `<td>${won(s2.years[y]?.liab)}</td>`).join('')}</tr>` : ''}</tbody></table></div>` : ''}
-      <h3>3차 · 필수 + 참고</h3>${s3html}
+      <h3>3차 · 필수 + 참고</h3>${s3html}${factHtml(x)}
       <ul class="sl">
         <li><span class="k">연간 영업적자 (${yrsOp[0] || ''}~${yrsOp[yrsOp.length - 1] || ''})</span> ${!yrsOp.length ? '-' : loss.length ? `<b class="neg">${loss.join(' · ')}</b>` : '없음'}</li>
         <li><span class="k">시장 대비 주가</span> 3개월 ${pc(x.px?.r3, '%p')} · 6개월 ${pc(x.px?.r6, '%p')}</li>

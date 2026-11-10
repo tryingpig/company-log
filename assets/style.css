@@ -521,7 +521,7 @@ details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visibl
 .ecs .ec { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; color: var(--text-2); }
 .earn-list .er { margin: 8px 0 0; font-size: 13px; }
 .earn-list .el { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
-.earn-list .el a { color: var(--accent); white-space: nowrap; }
+.earn-list .el a { color: var(--accent); white-space: nowrap; display: inline; padding: 0; }   /* .list a(행 전체 grid) 덮어쓰기 */
 @media (max-width: 600px) {
   .earn-list .ecard > summary { grid-template-columns: 1fr auto; }
   .earn-list .ep { grid-column: 1 / -1; justify-self: start; text-align: left; }
