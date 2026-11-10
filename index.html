@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261110b">
+<link rel="stylesheet" href="assets/style.css?v=20261110c">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -468,7 +468,7 @@ function earnCard(x) {
   const estRows = Object.entries(M).map(([k, [rk, lab]]) => {
     const rm = r?.m?.[rk], num = s => { if (s == null || s === '') return null; const f = parseFloat(String(s).replace('%', '')); return Number.isNaN(f) ? String(s) : f; };
     // 영업이익·순이익 옆에 매출 대비 이익률 (사용자 요청 11-10)
-    const mg = (v, rev) => k === 'rev' || v == null || !(rev > 0) ? ''
+    const mg = (v, rev) => k === 'rev' || v == null || !(rev > 0) ? ' <small class="mg"></small>'   // 빈 칸도 같은 폭 → 금액 끝이 한 줄로
       : ` <small class="mg" title="${k === 'op' ? '영업이익률' : '순이익률'} = ${lab} ÷ 매출">(${(v / rev * 100).toFixed(1)}%)</small>`;
     const eM = e ? mg(e[k], e.rev) : '', rM = r ? mg(eokN(rm?.value), eokN(r.m?.revenue?.value)) : '';
     // 발표 뒤엔 전년·전분기 대비를 실제(잠정) 실적 기준으로
@@ -496,7 +496,7 @@ function earnCard(x) {
       <span class="eq">${q}</span>${pill}</summary>
     <div class="eb">
       <h3>${r ? '잠정 실적' : '이번 분기 추정치'} <small>${e ? `추정치는 네이버 컨센서스 · ${e.d.slice(5).replace('-', '.')} 기록` : ''}</small></h3>
-      <div class="sc-tw"><table class="et"><thead><tr><th></th>${r ? '<th>추정치</th><th>잠정 실적</th><th>예상 대비</th><th>전년 대비</th><th>전분기 대비</th>' : '<th>추정치</th><th>전년 대비</th><th>전분기 대비</th>'}</tr></thead><tbody>${estRows}</tbody></table></div>
+      <div class="sc-tw"><table class="et"><thead><tr><th></th>${r ? '<th>추정치</th><th>잠정 실적</th><th>예상 대비</th><th>전년 대비 <small>(YoY)</small></th><th>전분기 대비 <small>(QoQ)</small></th>' : '<th>추정치</th><th>전년 대비 <small>(YoY)</small></th><th>전분기 대비 <small>(QoQ)</small></th>'}</tr></thead><tbody>${estRows}</tbody></table></div>
       ${!r ? '' : r.src === 'dart'
         ? '<p class="en">잠정 실적·전년/전분기 대비는 DART 잠정실적 공시 원문 기준, 예상 대비는 네이버 추정치 기준이에요(시총 5,000억 미만이라 스탁이지 목록에 없는 종목)</p>'
         : '<p class="en">잠정 실적·예상 대비·전년/전분기 대비는 스탁이지 기준이에요(스탁이지 예상치는 네이버 추정치와 다를 수 있어요)</p>'}${chg}
