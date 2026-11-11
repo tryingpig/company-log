@@ -104,12 +104,13 @@ def results(s, d, today):
 NV_ROWS = {"매출액": "rev", "영업이익": "op", "당기순이익": "net", "영업이익률": "opm"}
 
 
-def naver_fin(code, today):
-    """네이버 분기 재무: {YYYYMM: {rev, op, net, opm, cons}} (억원·%). 하루 1번만 받는다."""
+def naver_fin(code, today, since=None):
+    """네이버 분기 재무: {YYYYMM: {rev, op, net, opm, cons}} (억원·%). 하루 1번만 받는다.
+    since = 지난 발표일. 그날 이후 받아 둔 게 있으면 다시 받지 않는다(발표 뒤 추정치는 안 쓰고 지난 분기는 그대로)."""
     p = CACHE / f"nv_{code}.json"
     if p.exists():
         j = json.loads(p.read_text(encoding="utf-8"))
-        if j.get("fetched") == today.isoformat():
+        if j.get("fetched") == today.isoformat() or (since and j.get("fetched", "") >= since):
             return j["q"]
     r = requests.get(f"https://m.stock.naver.com/api/stock/{code}/finance/quarter",
                      headers={"User-Agent": "Mozilla/5.0 (iPhone) Mobile", "Referer": "https://m.stock.naver.com/"}, timeout=20)
@@ -156,15 +157,16 @@ def growth(a, b):
     return "적자 축소" if a > b else "적자 확대" if a < b else "적자 지속"
 
 
-def checks(code, pe, q, hist, today):
+def checks(code, pe, q, hist, today, rd):
     """발표 전 체크: 이번 분기 추정치(전년·전분기 실적 대비, 기록 시작 뒤 변화) + 지난 5분기.
-    q = naver_fin 결과, hist = 발표 전 추정치 기록 {code|YYYYMM: {first, last}} — 여기서 갱신한다."""
+    q = naver_fin 결과, hist = 발표 전 추정치 기록 {code|YYYYMM: {first, last}} — 발표일(rd)까지만 갱신한다.
+    네이버는 분기보고서가 나올 때까지 그 분기를 추정으로 두므로 cons 만으로는 발표 여부를 모른다."""
     y, m = pe
     key = f"{y}{m:02d}"
     pm = (y, m - 3) if m > 3 else (y - 1, m + 9)
     ya, qa, cur = q.get(f"{y - 1}{m:02d}"), q.get(f"{pm[0]}{pm[1]:02d}"), q.get(key)
     hk = f"{code}|{key}"
-    if cur and cur["cons"] and cur.get("op") is not None:          # 아직 발표 전 → 추정치 기록
+    if cur and cur["cons"] and cur.get("op") is not None and today.isoformat() <= rd:   # 아직 발표 전 → 추정치 기록
         snap = {"d": today.isoformat(), **{k: cur.get(k) for k in FIELDS}}
         h = hist.setdefault(hk, {"first": snap})
         h["last"] = snap
@@ -331,9 +333,11 @@ def main():
     inlog = {x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
     codes = [it["symbol"] for it in items]
 
+    since = {it["symbol"]: it["record_date"] for it in items if it["record_date"] < today.isoformat()}
+
     def fin(code):
         try:
-            return naver_fin(code, today)
+            return naver_fin(code, today, since.get(code))
         except Exception as e:
             return e
     with ThreadPoolExecutor(8) as ex:
@@ -355,7 +359,7 @@ def main():
         if isinstance(fins[code], Exception):
             fail.append(f"{it['company']}: {type(fins[code]).__name__}")
         else:
-            row.update(checks(code, it["_pe"], fins[code], hist, today))
+            row.update(checks(code, it["_pe"], fins[code], hist, today, it["record_date"]))
         row["price"] = price(bars.get(code), mclose.get(mk) or {}, it["record_date"])
         r = res.get(code)
         if r and r.get("period") == row["period"]:

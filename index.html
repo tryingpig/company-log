@@ -487,7 +487,8 @@ function earnCard(x) {
     ${e ? `<tr class="est"><th>${q} 추정</th><td>${eok(e.rev)}</td><td>${eok(e.op)}</td><td>${eok(e.net)}</td><td>${e.opm == null ? '-' : e.opm.toFixed(1) + '%'}</td></tr>` : ''}
     ${x.past.map(f => `<tr><th>${f.p.slice(2)}</th><td>${eok(f.rev)}</td><td>${eok(f.op)}</td><td>${eok(f.net)}</td><td>${f.opm == null ? '-' : f.opm.toFixed(1) + '%'}</td></tr>`).join('')}
     </tbody></table>` : '<p class="mut">분기 실적 없음</p>';
-  const chg = e?.chg ? `<p class="en">기록 시작(${e.chg.since.slice(5).replace('-', '.')}) 뒤 추정치 변화 · 매출 ${pc(e.chg.rev)} · 영업익 ${pc(e.chg.op)} · 순이익 ${pc(e.chg.net)}</p>` : '';
+  const moved = e?.chg ? [['매출', e.chg.rev], ['영업익', e.chg.op], ['순이익', e.chg.net]].filter(([, v]) => v != null && v !== 0 && v !== '적자 지속') : [];
+  const chg = e?.chg ? `<p class="en">기록 시작(${e.chg.since.slice(5).replace('-', '.')}) 뒤 추정치 ${moved.length ? '변화 · ' + moved.map(([l, v]) => `${l} ${pc(v)}`).join(' · ') : '변화 없음'}</p>` : '';
   const links = [x.inlog ? `<a href="stock.html?code=${x.code}">company-log 종목 페이지 →</a>` : '',
     r?.rcept ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept}" target="_blank" rel="noopener">잠정실적 공시 원문 ↗</a>` : '',
     `<a href="https://m.stock.naver.com/domestic/stock/${x.code}/finance/quarter" target="_blank" rel="noopener">네이버 분기 실적 ↗</a>`].filter(Boolean).join('');
