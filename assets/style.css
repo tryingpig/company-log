@@ -633,3 +633,6 @@ a.edge-card:hover { border-color: var(--accent); }
 
 /* 차트만 보는 종목 페이지 안내 (리포트 로그에 없는 매수 에지 종목) */
 .chart-only { margin: -4px 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--line); color: var(--text-2); font-size: 13px; }
+.edge-grid .edge-gh { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 10px 2px 0; font-size: 14px; }
+.edge-grid .edge-gh:first-child { padding-top: 0; }
+.edge-grid .edge-gh .mut { font-size: 12px; }

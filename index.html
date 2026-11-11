@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111f">
+<link rel="stylesheet" href="assets/style.css?v=20261111g">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -177,7 +177,7 @@
         <button type="button" data-v="all" aria-pressed="false">전체 <span id="nEdgeAll"></span></button>
       </div>
       <div class="seg" role="group" aria-label="정렬" id="edgeSort">
-        <button type="button" data-v="new" class="on" aria-pressed="true">새로 켜진 순</button>
+        <button type="button" data-v="new" class="on" aria-pressed="true" title="켜진 날별로 묶고, 같은 날 안에서는 시총 큰 순">새로 켜진 순</button>
         <button type="button" data-v="cap" aria-pressed="false">시총 순</button>
         <button type="button" data-v="chg" aria-pressed="false">켜진 뒤 상승률</button>
         <button type="button" data-v="tv" aria-pressed="false">거래대금 순</button>
@@ -945,10 +945,14 @@ function renderEdge() {
   const rows = base.filter(x => [...edgeF].every(f => EF[f](x))).sort(ES[edgeSort]);
   document.getElementById('edgeCount').textContent = `${rows.length}종목`;
   const vis = rows.slice(0, edgeShow);
-  document.getElementById('edgeList').innerHTML = vis.map(x => {
+  // 새로 켜진 순: 켜진 날마다 제목 줄(날짜 · D+n · 종목 수) — 그 안은 시총 큰 순 (사용자 요청 11-11)
+  const nRun = {}; rows.forEach(x => { nRun[x.run] = (nRun[x.run] || 0) + 1; });
+  document.getElementById('edgeList').innerHTML = vis.map((x, i) => {
+    const gh = edgeSort === 'new' && (i === 0 || vis[i - 1].run !== x.run)
+      ? `<li class="edge-gh"><b>${edgeDay(x.since)} 켜짐</b> <span class="edgec up">D+${x.run}</span> <span class="mut">${nRun[x.run]}종목 · 시총 큰 순</span></li>` : '';
     // 전부 종목 페이지로 — 리포트 로그에 없는 종목은 차트만 보는 페이지(data/charts, 사용자 요청 11-11)
     const [o, cl] = [`<a class="edge-card" href="stock.html?code=${x.code}">`, '</a>'];
-    return `<li>${o}
+    return `${gh}<li>${o}
       <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 종목 페이지에 리포트까지 나와요">리포트</small>' : ''}</span>
         <span class="edgec up" title="${x.run}거래일째 켜져 있음">${edgeDay(x.since)} D+${x.run}</span></span>
       <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small>거래대금/일</small>${eok(x.tv)}</span></span>
