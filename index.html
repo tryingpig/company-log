@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111a">
+<link rel="stylesheet" href="assets/style.css?v=20261111b">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -164,7 +164,7 @@
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
           <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
         </ol>
-        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(회색)와 5·10·20·60일선, 아래 띠는 매수 에지(빨강)·매도 에지(파랑)였던 날</p>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 「리포트」가 붙은 종목은 리포트 로그에 있어 누르면 종목 페이지로 가요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
         <button type="button" data-v="new" class="on" aria-pressed="true">최근 3거래일 켜짐 <span id="nEdgeNew"></span></button>
@@ -873,14 +873,19 @@ const ES = {new: (a, b) => a.run - b.run || (b.cap || 0) - (a.cap || 0), cap: (a
 function edgeSvg(x) {
   const W = 300, H = 84, B = 6, n = x.e.length, c = x.c, off = c.length - n;
   const ma = k => c.map((_, i) => i < k - 1 ? null : c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k).slice(off);
-  const lines = [[c.slice(off), '--text-2', 1.2], [ma(60), '--ma60', 1.6], [ma(20), '--ma20', 1], [ma(10), '--ma10', 1], [ma(5), '--ma5', 1]];
+  // 종가는 맨 위에 진하게 (사용자 요청 11-11)
+  const lines = [[ma(60), '--ma60', 1.6], [ma(20), '--ma20', 1], [ma(10), '--ma10', 1], [ma(5), '--ma5', 1], [c.slice(off), '--text', 1.8]];
   const all = lines.flatMap(l => l[0]).filter(v => v != null), lo = Math.min(...all), hi = Math.max(...all), sp = hi - lo || 1;
   const X = i => (i / (n - 1) * W).toFixed(1), Y = v => (2 + (1 - (v - lo) / sp) * (H - 4)).toFixed(1);
   const path = a => a.map((v, i) => v == null ? '' : `${X(i)},${Y(v)}`).filter(Boolean).join(' ');
   const bw = W / n;
+  // 매수 에지였던 구간은 차트 배경에도 옅게 (이어진 날은 한 칸으로)
+  const runs = [];
+  [...x.e].forEach((s, i) => { if (s !== '+') return; const r = runs[runs.length - 1]; if (r && r[1] === i - 1) r[1] = i; else runs.push([i, i]); });
+  const shade = runs.map(([a, b]) => `<rect x="${(a * bw).toFixed(1)}" y="0" width="${((b - a + 1) * bw).toFixed(1)}" height="${H}" fill="var(--up)" opacity=".1"/>`).join('');
   const band = [...x.e].map((s, i) => s === '.' ? '' : `<rect x="${(i * bw).toFixed(1)}" y="${H + 3}" width="${(bw + 0.3).toFixed(1)}" height="${B}" fill="var(${s === '+' ? '--up' : '--down'})"/>`).join('');
   return `<svg viewBox="0 0 ${W} ${H + B + 3}" preserveAspectRatio="none" role="img" aria-label="${esc(x.name)} 최근 3개월 종가와 이동평균선">
-    ${lines.map(([a, col, w]) => `<polyline fill="none" stroke="var(${col})" stroke-width="${w}" vector-effect="non-scaling-stroke" points="${path(a)}"/>`).join('')}
+    ${shade}${lines.map(([a, col, w]) => `<polyline fill="none" stroke="var(${col})" stroke-width="${w}" vector-effect="non-scaling-stroke" points="${path(a)}"/>`).join('')}
     <rect x="0" y="${H + 3}" width="${W}" height="${B}" fill="var(--line)"/>${band}</svg>`;
 }
 function renderEdge() {
@@ -889,12 +894,13 @@ function renderEdge() {
   document.getElementById('edgeCount').textContent = `${rows.length}종목`;
   const vis = rows.slice(0, edgeShow);
   document.getElementById('edgeList').innerHTML = vis.map(x => {
-    const href = x.inlog ? `stock.html?code=${x.code}` : `https://m.stock.naver.com/domestic/stock/${x.code}/total`;
-    return `<li><a class="edge-card" href="${href}"${x.inlog ? '' : ' target="_blank" rel="noopener"'}>
-      <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
+    // 리포트 로그 종목만 종목 페이지로 — 나머지는 우리 화면이 없어 누르지 않는 카드 (사용자 결정 11-11)
+    const [o, cl] = x.inlog ? [`<a class="edge-card" href="stock.html?code=${x.code}">`, '</a>'] : ['<div class="edge-card">', '</div>'];
+    return `<li>${o}
+      <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 누르면 종목 페이지">리포트</small>' : ''}</span>
         <span class="edgec up" title="${x.since.slice(5).replace('-', '.')}부터">▲ ${x.run}일째</span></span>
       <span class="em">${x.since.slice(5).replace('-', '.')} 켜짐 · 켜진 뒤 ${pc(x.chg)} · 시총 ${x.cap ? eok(x.cap) : '-'} · 거래대금 ${eok(x.tv)}/일</span>
-      ${edgeSvg(x)}</a></li>`;
+      ${edgeSvg(x)}${cl}</li>`;
   }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
   document.getElementById('edgeBtns').hidden = rows.length <= edgeShow;
 }
