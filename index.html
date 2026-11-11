@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111c">
+<link rel="stylesheet" href="assets/style.css?v=20261111d">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -428,13 +428,23 @@ addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 // 폰 메뉴: 탭 버튼을 그대로 옮겨 '현재 메뉴 ▾' 와 펼침 목록을 만든다 (숫자 배지는 탭 버튼 것을 복사)
 const MENU_DESC = {list: '리포트 로그 종목 · 목표가·의견', flips: '같은 증권사 상향↔하향', signals: '강도·거래량 / 매도 우위 대량 거래',
   edge: '전 상장사 · 이평선 정배열 + 모두 상승', earn: '발표 일정 · 추정치 · 잠정 실적', scr: '전 상장사 실적 1~3차 거르기'};
+// 메뉴 아이콘 — 막연한 은유 말고 그 화면의 실물 모양: 리포트 문서 · 상향↔하향 화살표 · 거래량 막대 · 올라가는 이평선 · 달력 · 거르는 깔때기
+const MENU_ICON = {
+  list: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>',
+  flips: '<path d="M8 20V5M4 9l4-4 4 4"/><path d="M16 4v15M12 15l4 4 4-4"/>',
+  signals: '<path d="M3 21h18"/><path d="M6 18v-3M10 18v-6M14 18V5M18 18v-4"/>',
+  edge: '<path d="M3 19l5-5 4 2 9-9"/><path d="M15 7h6v6"/>',
+  earn: '<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  scr: '<path d="M4 5h16l-6 7.5V18l-4 2v-7.5z"/>'};
+const micon = t => `<span class="mi mi-${t}" aria-hidden="true"><svg viewBox="0 0 24 24">${MENU_ICON[t] || ''}</svg></span>`;
+document.querySelectorAll('.tabs [role=tab]').forEach(b => b.insertAdjacentHTML('afterbegin', micon(b.dataset.tab)));
 function tabBadges(b) { return [...b.querySelectorAll('.tn')].filter(t => t.textContent).map(t => `<span class="${t.className}${b.dataset.tab === 'flips' ? ' imp' : ''}">${t.textContent}</span>`).join(''); }
 function tabName(b) { return [...b.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim(); }
 function menuSync() {
   const tabs = [...document.querySelectorAll('.tabs [role=tab]')], cur = tabs.find(b => b.getAttribute('aria-selected') === 'true') || tabs[0];
-  document.getElementById('pick').innerHTML = `<span class="nm">${tabName(cur)}</span>${tabBadges(cur)}<span class="car">▾</span>`;
-  document.getElementById('sheet').innerHTML = tabs.map(b => `<a href="#${b.dataset.tab === 'list' ? '' : b.dataset.tab}" data-tab="${b.dataset.tab}" class="${b === cur ? 'on' : ''}">
-    <span class="mt"><span class="nm">${tabName(b)}</span>${tabBadges(b)}</span><span class="md">${MENU_DESC[b.dataset.tab] || ''}</span></a>`).join('');
+  document.getElementById('pick').innerHTML = `${micon(cur.dataset.tab)}<span class="nm">${tabName(cur)}</span>${tabBadges(cur)}<span class="car">▾</span>`;
+  document.getElementById('sheet').innerHTML = tabs.map(b => `<a href="#${b.dataset.tab === 'list' ? '' : b.dataset.tab}" data-tab="${b.dataset.tab}" class="${b === cur ? 'on' : ''}">${micon(b.dataset.tab)}
+    <span class="mx"><span class="mt"><span class="nm">${tabName(b)}</span>${tabBadges(b)}</span><span class="md">${MENU_DESC[b.dataset.tab] || ''}</span></span></a>`).join('');
 }
 function sheetOpen(on) {
   document.getElementById('sheet').hidden = !on; document.getElementById('sheetDim').hidden = !on;

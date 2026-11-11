@@ -407,11 +407,17 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
 .tabs { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tabs [role=tab] { font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); background: none; border: 0;
-  border-radius: 8px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+  border-radius: 8px; padding: 6px 8px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+/* 메뉴 아이콘: 메뉴마다 색 판 + 선 아이콘 */
+.mi { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 20px; height: 20px; border-radius: 6px;
+  color: var(--mc); background: color-mix(in srgb, var(--mc) 15%, transparent); }
+.mi svg { width: 72%; height: 72%; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.mi-list { --mc: var(--accent); } .mi-flips { --mc: var(--imp-line); } .mi-signals { --mc: var(--sig); }
+.mi-edge { --mc: var(--up); } .mi-earn { --mc: var(--ma10); } .mi-scr { --mc: var(--ma20); }
 .tabs [role=tab]:hover { background: var(--line); color: var(--text); }
 .tabs [role=tab][aria-selected="true"] { color: var(--text); background: var(--line); }
 .pick, .sheet, .sheet-dim { display: none; }
-@media (max-width: 560px) {
+@media (max-width: 900px) {      /* 메뉴 6개가 한 줄에 안 들어가는 폭부터 폰 메뉴 */
   .appbar-in { padding: 0 12px; height: 52px; }
   .brand { font-size: 22px; margin-right: 0; }
   .brand .bt, .appbar .tabs { display: none; }
@@ -422,15 +428,22 @@ h2.day .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
   .pick[aria-expanded="true"] .car { transform: rotate(180deg); }
   .sheet:not([hidden]) { display: block; position: fixed; top: 52px; left: 8px; right: 8px; z-index: 30; max-height: calc(100dvh - 70px); overflow-y: auto;
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 6px; }
-  .sheet a { display: block; padding: 10px 12px; border-radius: 9px; color: var(--text); text-decoration: none; }
+  .sheet a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 9px; color: var(--text); text-decoration: none; }
+  .sheet a .mi { width: 34px; height: 34px; border-radius: 10px; }
+  .sheet .mx { min-width: 0; }
+  .pick .mi { width: 24px; height: 24px; border-radius: 7px; }
   .sheet a.on { background: var(--line); }
   .sheet .mt { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; }
   .sheet .md { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
   .sheet-dim:not([hidden]) { display: block; position: fixed; inset: 52px 0 0 0; z-index: 25; background: rgba(0,0,0,.25); }
   .top-meta { text-align: left; }
 }
+@media (max-width: 560px) {      /* 종목 목록: 배지가 많으면 종목명이 글자 단위로 꺾이던 문제 → 배지 줄을 종목명 아래로 */
+  .list .rt { grid-column: 1 / -1; justify-self: start; flex-wrap: wrap; }
+  .list .nm .mk { white-space: nowrap; }
+}
 .tabs [role=tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
-.tabs .tn, .pick .tn, .sheet .tn { display: inline-block; min-width: 18px; font-size: 11px; font-weight: 700; color: var(--surface); background: var(--sig); border-radius: 9px; padding: 0 6px; margin-left: 4px; vertical-align: 1px; }
+.tabs .tn, .pick .tn, .sheet .tn { display: inline-block; min-width: 18px; font-size: 11px; font-weight: 700; color: var(--surface); background: var(--sig); border-radius: 9px; padding: 0 6px; margin-left: 0; vertical-align: 1px; }
 .tabs .tn:empty, .pick .tn:empty, .sheet .tn:empty { display: none; }
 #tab-flips .tn, .tn.imp { background: var(--imp-line); }
 .sig-rule { font-size: 13px; color: var(--text-2); margin: 0 0 10px; }
