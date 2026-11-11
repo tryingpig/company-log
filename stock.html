@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111e">
+<link rel="stylesheet" href="assets/style.css?v=20261111f">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -28,6 +28,7 @@
     <a class="nv-link" id="nvLink" target="_blank" rel="noopener" hidden>네이버 증권 ↗</a>
     <span class="px" id="px"></span><span class="chg" id="chg"></span>
   </div>
+  <p class="chart-only" id="chartOnly" hidden></p>
 
   <div class="panel chart-box" id="secChart">
     <div class="edge-state" id="edgeState" hidden></div>
@@ -756,7 +757,9 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
 
 if (!code) location.replace('./');
 Promise.all([
-  fetch(`data/stocks/${code}.json`, {cache: 'no-cache'}).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+  // 리포트 로그 종목이 아니면 매수 에지 탭이 만든 차트 전용 파일(data/charts)로 — 사용자 요청 11-11
+  fetch(`data/stocks/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r : fetch(`data/charts/${code}.json`, {cache: 'no-cache'}))
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
   fetch(`data/analysis/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   fetch('data/market.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
 ])
@@ -764,8 +767,16 @@ Promise.all([
     data = d; analysis = a; market = m;
     idxMap = {};
     (m && d.market && m[d.market] || []).forEach(x => { idxMap[x.d] = x.c; });
-    renderHead(); drawChart(); renderRelPerf(); renderConsensus();
-    renderForward(); renderBrokers(); renderLog();
+    renderHead(); drawChart(); renderRelPerf();
+    if (d.chart_only) {                                     // 리포트 칸은 숨기고 차트만
+      ['secCons', 'consensus', 'secFwd', 'forward', 'secBrk', 'brokers', 'secLog', 'log'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+      document.querySelectorAll('#fabMenu a').forEach(a => { if (!['#secChart', '#relHead'].includes(a.getAttribute('href'))) a.remove(); });
+      const n = document.getElementById('chartOnly');
+      n.innerHTML = `리포트 로그에 없는 종목 — 차트만 보여드려요 · 「매수 에지」 탭에 있는 동안만 열려요 (${esc(d.updated.slice(5).replace('-', '.'))} 갱신)`;
+      n.hidden = false;
+    } else {
+      renderConsensus(); renderForward(); renderBrokers(); renderLog();
+    }
     // 목록의 '최근 의견 전환'에서 들어오면 그 리포트로 이동
     setTimeout(() => { const m = location.hash.match(/^#r(\d+)$/); if (m) focusCard(m[1]); }, 0);
   })

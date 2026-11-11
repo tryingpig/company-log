@@ -5,6 +5,8 @@
   - 장중 값은 하루 봉이 덜 끝나 에지가 켜졌다 꺼질 수 있으므로 장 마감(15:30) 뒤 실행에서만 계산한다.
     10:00 실행은 건너뛰고 앞 저장본을 그대로 둔다. --force 면 시각과 상관없이 계산.
   - 출력 data/edges.json: 종목마다 최근 122일 종가(화면이 5·10·20·60일선을 직접 계산) + 최근 62일 에지 문자열.
+  - 리포트 로그에 없는 매수 에지 종목은 data/charts/{code}.json(종목 페이지와 같은 모양, 리포트 없음)도 쓴다 → 차트만 보는 종목 페이지.
+    data/stocks 가 아니라 따로 두는 이유: analyze.py(AI 정리)가 data/stocks 를 전부 돌기 때문. 목록에서 빠진 종목 파일은 지운다.
 
 실행: Python39-32 python tools/edges.py [--force]
 """
@@ -20,6 +22,7 @@ import build
 
 ROOT, DATA, KST = build.ROOT, build.DATA, build.KST
 OUT = DATA / "edges.json"
+CHARTS = DATA / "charts"
 CLOSES = 122          # 화면 차트 62일 + 60일선 워밍업
 SHOW = 62
 NV_H = {"User-Agent": "Mozilla/5.0 (iPhone) Mobile", "Referer": "https://m.stock.naver.com/"}
@@ -41,6 +44,32 @@ def market_caps():
             page += 1
             time.sleep(0.2)
     return out
+
+
+def write_charts(items, bars, now):
+    """리포트 없는 매수 에지 종목의 차트 화면용 파일 — build.py 가 쓰는 data/stocks/{code}.json 과 같은 키, 리포트만 비움."""
+    mpath = DATA / "market.json"
+    mdata = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
+    CHARTS.mkdir(parents=True, exist_ok=True)
+    keep = set()
+    for x in items:
+        b = bars[x["code"]]
+        for b_ in b:                                         # 거래정지일: 시가·고가·저가 0 → 종가로 (build.py 와 같게)
+            if not (b_["o"] and b_["h"] and b_["l"]):
+                b_["o"] = b_["h"] = b_["l"] = b_["c"]
+        mc = {r["d"]: r["c"] for r in mdata.get(x["market"], [])}
+        st = build.edge_states(b)
+        (CHARTS / f"{x['code']}.json").write_text(json.dumps({
+            "code": x["code"], "name": x["name"], "updated": now.strftime("%Y-%m-%d %H:%M"), "market": x["market"],
+            "chart_only": True, "cap": x["cap"],
+            "signals": build.strength_signals_mc(b, mc) if mc else [], "sells": build.sell_signals(b),
+            "edges": "".join({1: "+", -1: "-", 0: "."}[v] for v in st),
+            "close": b[-1]["c"], "close_date": b[-1]["d"], "consensus": None, "brokers": [],
+            "prices": b, "reports": []}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        keep.add(f"{x['code']}.json")
+    for p in CHARTS.glob("*.json"):
+        if p.name not in keep:
+            p.unlink()
 
 
 def main():
@@ -80,6 +109,7 @@ def main():
                       "c": [x["c"] for x in b[-CLOSES:]],
                       "e": "".join("+" if v == 1 else "-" if v == -1 else "." for v in st[-SHOW:])})
     items.sort(key=lambda x: (x["run"], -(x["cap"] or 0)))
+    write_charts([x for x in items if not x["inlog"]], ok, now)
     OUT.write_text(json.dumps({"updated": now.strftime("%Y-%m-%d %H:%M"), "d": last, "universe": len(ok),
                                "items": items}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     miss = len(codes) - len(ok)

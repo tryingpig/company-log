@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111e">
+<link rel="stylesheet" href="assets/style.css?v=20261111f">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -170,7 +170,7 @@
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
           <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
         </ol>
-        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 「리포트」가 붙은 종목은 리포트 로그에 있어 누르면 종목 페이지로 가요</p>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
         <button type="button" data-v="new" class="on" aria-pressed="true">최근 3거래일 켜짐 <span id="nEdgeNew"></span></button>
@@ -946,10 +946,10 @@ function renderEdge() {
   document.getElementById('edgeCount').textContent = `${rows.length}종목`;
   const vis = rows.slice(0, edgeShow);
   document.getElementById('edgeList').innerHTML = vis.map(x => {
-    // 리포트 로그 종목만 종목 페이지로 — 나머지는 우리 화면이 없어 누르지 않는 카드 (사용자 결정 11-11)
-    const [o, cl] = x.inlog ? [`<a class="edge-card" href="stock.html?code=${x.code}">`, '</a>'] : ['<div class="edge-card">', '</div>'];
+    // 전부 종목 페이지로 — 리포트 로그에 없는 종목은 차트만 보는 페이지(data/charts, 사용자 요청 11-11)
+    const [o, cl] = [`<a class="edge-card" href="stock.html?code=${x.code}">`, '</a>'];
     return `<li>${o}
-      <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 누르면 종목 페이지">리포트</small>' : ''}</span>
+      <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 종목 페이지에 리포트까지 나와요">리포트</small>' : ''}</span>
         <span class="edgec up" title="${x.run}거래일째 켜져 있음">${edgeDay(x.since)} D+${x.run}</span></span>
       <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small>거래대금/일</small>${eok(x.tv)}</span></span>
       ${edgeSvg(x)}${cl}</li>`;
