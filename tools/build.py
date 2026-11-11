@@ -467,6 +467,11 @@ def main():
     slog = {}
     if SIGNAL_LOG.exists():
         slog = {(r["k"], r["code"], r["d"]): r for r in json.loads(SIGNAL_LOG.read_text(encoding="utf-8"))["rows"]}
+    slog_by_code = {}
+    for k_ in slog:
+        slog_by_code.setdefault(k_[1], []).append(k_)
+    _now = datetime.now(KST)
+    today_s, closed = _now.strftime("%Y-%m-%d"), _now.strftime("%H:%M") >= "20:00"   # 넥스트 마감 뒤라야 오늘 봉 확정
     base = {h: [] for h in AFTER_H}                          # 기준선: 같은 종목들을 아무 날이나 샀다면 (r, x)
 
     tdays = sorted(set(mclose.get("KOSPI", {})))[-SIG_TDAYS:]
@@ -517,10 +522,19 @@ def main():
         sigs = strength_signals(bars, market) if market else []
         sells = sell_signals(bars)
         edges = edge_states(bars)
+        # 성적표 기록은 장 마감(넥스트 20:00) 뒤 확정된 봉만 남긴다. 지금 일봉으로 다시 계산할 수 있는 구간은
+        # 매번 지우고 새로 넣는다 — 장중 실행이 남긴 반쪽 봉 신호, 네이버가 뒤늦게 고친 값이 그대로 남지 않게.
+        # 일봉 창(6개월)보다 오래된 기록은 다시 계산할 수 없으니 건드리지 않는다.
+        if len(bars) > 21:
+            lo = bars[21]["d"]
+            for k_ in slog_by_code.get(code, ()):
+                if k_[2] >= lo:
+                    slog.pop(k_, None)
         for kind, lst, out in (("sell", sells, sellfeed), ("buy", sigs, sigfeed)):
             for s_ in lst:
                 o, aft = after(bars, market, s_["d"])
-                slog[(kind, code, s_["d"])] = {"k": kind, "code": code, "name": v["name"], "market": market, **s_, **o}
+                if s_["d"] < today_s or closed:
+                    slog[(kind, code, s_["d"])] = {"k": kind, "code": code, "name": v["name"], "market": market, **s_, **o}
                 if s_["d"] >= feed_cut:
                     out.append({"date": s_["d"], "code": code, "name": v["name"], "market": market, **s_, **aft})
         mc_ = mclose.get(market) or {}

@@ -223,11 +223,16 @@ def dart_parse(xml):
     return out if "rev" in out and "op" in out else None
 
 
+NO_DART = "--no-dart" in sys.argv     # 가벼운 실행(08:30·11:30·14:00): DART 는 받아 둔 캐시만, 새로 부르지 않는다
+
+
 def dart_doc(rc, key):
-    """접수번호 → 파싱 결과. 공시는 안 바뀌므로 성공한 것만 영구 캐시."""
+    """접수번호 → 파싱 결과. 공시는 안 바뀌므로 성공한 것만 영구 캐시. NO_DART 면 캐시에 없을 때 None."""
     p = CACHE / f"dart_{rc}.json"
     if p.exists():
         return json.loads(p.read_text(encoding="utf-8"))
+    if NO_DART:
+        return None
     r = requests.get("https://opendart.fss.or.kr/api/document.xml", params={"crtfc_key": key, "rcept_no": rc}, timeout=30)
     r.raise_for_status()
     if r.content[:2] != b"PK":
@@ -367,7 +372,7 @@ def main():
     hist = json.loads(hpath.read_text(encoding="utf-8")) if hpath.exists() else {}
 
     out, fail = [], []
-    key, ndart, dfail = None, 0, []
+    key, ndart, ndefer, dfail = None, 0, 0, []
     for it in items:
         code = it["symbol"]
         mk = MKT.get(it.get("market"), "KOSPI")
@@ -390,18 +395,23 @@ def main():
             rc = re.search(r"\((\d{14})\)", it.get("detail") or "")      # 시총 5,000억 미만 → 공시 원문
             try:
                 key = key or dart_key()
-                row["result"] = dart_result(dart_doc(rc.group(1), key), rc.group(1), row.get("est"))
-                ndart += 1
+                d = dart_doc(rc.group(1), key)
+                if d is None:                                          # --no-dart: 다음 정규 실행이 받는다
+                    ndefer += 1
+                else:
+                    row["result"] = dart_result(d, rc.group(1), row.get("est"))
+                    ndart += 1
             except Exception as e:
                 dfail.append(f"{it['company']}: {'접수번호 없음' if not rc else e}")
-            time.sleep(0.2)
+            if not NO_DART:
+                time.sleep(0.2)
         out.append(row)
     hpath.write_text(json.dumps(hist, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     out.sort(key=lambda x: (x["date"], x["name"]))
     add_conf(out)
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "start": start, "items": out},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart})"
+    print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart}{f', 정규 실행 때 받을 것 {ndefer}' if ndefer else ''})"
           f" · 추정치 {sum('est' in x for x in out)}"
           + (f" · 실패 {len(fail)}: {fail[:5]}" if fail else "")
           + (f" · DART 파싱 실패 {len(dfail)}: {dfail[:5]}" if dfail else ""))

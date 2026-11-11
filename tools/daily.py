@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-"""매일 갱신: 데이터 빌드 → 새 리포트만 AI 정리 → GitHub 반영. 스케줄러(CompanyLogDaily, 평일 10:00·15:40·20:05)가 실행한다.
+"""매일 갱신: 데이터 빌드 → 새 리포트만 AI 정리 → GitHub 반영. 스케줄러 CompanyLogDaily(평일 10:00·15:40·20:05)·CompanyLogLight(--light, 08:30·11:30·14:00)가 실행한다.
 
   1) build.py (Python39-32): 일봉·3개월 구간·통합 목표가(최근 가중)·증권사별 표
   2) analyze.run_async: 3개월 안 리포트 3건 이상 종목 + 이미 정리한 종목, 새 리포트만 추출·의견 정리
   3) index.json 에 종목별 AI 정리 상태를 붙이고 git push (실행 중에도 30분마다)
 
-같은 시각에 두 개가 돌지 않게 잠금 파일을 잡는다. 오래 걸리면(첫 따라잡기) MAX_HOURS 에서 멈추고
+--light (CompanyLogLight, 평일 08:30·11:30·14:00): 텔레그램 리포트·네이버·스탁이지만 — DART 를 부르는
+실적 스크리닝·전 종목 매수 에지는 건너뛰고, 실적 캘린더는 받아 둔 DART 원문만 쓴다(--no-dart).
+08:30 은 넥스트 장전 거래가 섞인 반쪽 봉을 피하려고 일봉을 새로 받지 않는다(build --no-price).
+
+같은 시각에 두 개가 돌지 않게 잠금 파일을 잡는다(정규·가벼운 실행 공용). 오래 걸리면(첫 따라잡기) MAX_HOURS 에서 멈추고
 다음 실행이 이어 간다.
 
     C:\\Users\\admin\\AppData\\Local\\Programs\\Python\\Python312\\python.exe tools\\daily.py
@@ -29,6 +33,7 @@ LOCK = ROOT / "logs" / "daily.lock"
 MIN_REPORTS = 3
 MAX_HOURS = 22
 PUSH_EVERY = 30 * 60
+LIGHT = "--light" in sys.argv
 
 
 def log(msg):
@@ -87,7 +92,8 @@ def run_earnings():
     """실적 캘린더(earnings.py). 실패해도 나머지는 계속 — 문제 문장만 돌려준다."""
     log("실적 캘린더 시작")
     try:
-        r = subprocess.run([PY39, str(ROOT / "tools" / "earnings.py")], cwd=ROOT, capture_output=True, timeout=1800)
+        r = subprocess.run([PY39, str(ROOT / "tools" / "earnings.py")] + (["--no-dart"] if LIGHT else []),
+                           cwd=ROOT, capture_output=True, timeout=1800)
     except subprocess.TimeoutExpired:
         return "실적 캘린더 30분 넘게 걸려 중단 (기존 화면 유지)"
     out = (r.stdout + r.stderr).decode("utf-8", errors="replace")
@@ -139,16 +145,18 @@ def run_edges():
 
 async def main_async():
     t0 = time.time()
-    log("build 시작")
-    r = subprocess.run([PY39, str(ROOT / "tools" / "build.py")], cwd=ROOT, capture_output=True)
+    no_price = LIGHT and datetime.now(an.KST).strftime("%H:%M") < "09:00"     # 장 시작 전: 전날 확정 일봉 그대로
+    log("build 시작" + (" (가벼운 실행" + (", 일봉 안 받음" if no_price else "") + ")" if LIGHT else ""))
+    r = subprocess.run([PY39, str(ROOT / "tools" / "build.py")] + (["--no-price"] if no_price else []),
+                       cwd=ROOT, capture_output=True)
     out = (r.stdout + r.stderr).decode("utf-8", errors="replace")     # PYTHONUTF8=1 로 실행되므로 utf-8
     for ln in out.strip().splitlines()[-6:]:
         log(f"  build | {ln}")
     if r.returncode:
         raise RuntimeError(f"build.py 실패 (exit {r.returncode})")
     earn_problem = run_earnings()
-    scr_problem = run_screen()
-    edge_problem = run_edges()
+    scr_problem = None if LIGHT else run_screen()          # DART 를 많이 부른다 → 정규 실행에서만
+    edge_problem = None if LIGHT else run_edges()
     push("데이터 빌드")
 
     codes = an.targets(MIN_REPORTS)
