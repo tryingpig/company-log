@@ -95,6 +95,7 @@
         <ol class="rl">
           <li><b>일정</b>: 스탁이지 실적발표 캘린더 (DART 결산실적공시 예고·잠정실적 공시 기준)</li>
           <li><b>이번 분기 추정치</b>: 네이버 증권 컨센서스(억원). 발표 전 값을 매일 기록해 두고, 기록 시작 뒤 추정치가 바뀌면 함께 표시해요</li>
+          <li><b>분기보고서 확정</b>: 잠정 발표 값은 그대로 두고, 그 분기 분기보고서(DART)가 나오면 확정 값과 잠정 대비 차이를 한 줄 덧붙여요</li>
           <li><b>주가 흐름</b>: 1주·1개월 시장 대비, 20일선, 매수·매도 에지, 최근 5거래일 거래량 신호 — 거래량 신호 탭과 같은 기준</li>
           <li><b>지난 5분기 실적</b>: 네이버 증권 분기 실적</li>
           <li><b>발표 후</b>: 스탁이지 잠정 실적과 예상 대비(시총 5,000억 이상만), 발표일·다음 날 등락</li>
@@ -489,8 +490,23 @@ function earnCard(x) {
     </tbody></table>` : '<p class="mut">분기 실적 없음</p>';
   const moved = e?.chg ? [['매출', e.chg.rev], ['영업익', e.chg.op], ['순이익', e.chg.net]].filter(([, v]) => v != null && v !== 0 && v !== '적자 지속') : [];
   const chg = e?.chg ? `<p class="en">기록 시작(${e.chg.since.slice(5).replace('-', '.')}) 뒤 추정치 ${moved.length ? '변화 · ' + moved.map(([l, v]) => `${l} ${pc(v)}`).join(' · ') : '변화 없음'}</p>` : '';
+  // 분기보고서가 나오면 잠정 발표는 그대로 두고 확정 값 한 줄 (사용자 결정 11-11). 잠정 없이 보고서로 낸 곳(regular)은 표가 곧 확정
+  const c = x.conf && r?.kind !== 'regular' ? x.conf : null;
+  const cHead = c ? `분기보고서 ${c.d.slice(5).replace('-', '.')} 확정${c.fs === 'OFS' ? ' <small>(별도)</small>' : ''}` : '';
+  let conf = '';
+  if (c && c.ccy && c.ccy !== 'KRW') {
+    conf = `<p class="en">${cHead} · ${esc(c.ccy)}로 공시해서 원화 금액 비교는 생략 (분기보고서 원문 참고)</p>`;
+  } else if (c && r) {
+    const diff = Object.entries(M).map(([k, [rk, lab]]) => [lab, eokN(r.m?.[rk]?.value), c[k]])
+      .filter(([, a, b]) => a != null && b != null && Math.abs(a - b) >= 1);
+    conf = `<p class="en">${cHead} · ${diff.length ? diff.map(([lab, a, b]) =>
+      `${lab} ${eok(a)} → ${eok(b)}${a > 0 && b > 0 ? ` (${pc(+((b / a - 1) * 100).toFixed(1))})` : ''}`).join(' · ') : '잠정과 같음'}</p>`;
+  } else if (c) {
+    conf = `<p class="en">${cHead} · ${Object.entries(M).filter(([k]) => c[k] != null).map(([k, [, lab]]) => `${lab} ${eok(c[k])}`).join(' · ')}</p>`;
+  }
   const links = [x.inlog ? `<a href="stock.html?code=${x.code}">company-log 종목 페이지 →</a>` : '',
-    r?.rcept ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept}" target="_blank" rel="noopener">잠정실적 공시 원문 ↗</a>` : '',
+    r?.rcept ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept}" target="_blank" rel="noopener">${r.kind === 'regular' ? '분기보고서' : '잠정실적 공시'} 원문 ↗</a>` : '',
+    c ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${c.rc}" target="_blank" rel="noopener">분기보고서 원문 ↗</a>` : '',
     `<a href="https://m.stock.naver.com/domestic/stock/${x.code}/finance/quarter" target="_blank" rel="noopener">네이버 분기 실적 ↗</a>`].filter(Boolean).join('');
   return `<li><details class="ecard"><summary>
       <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
@@ -500,7 +516,7 @@ function earnCard(x) {
       <div class="sc-tw"><table class="et"><thead><tr><th></th>${r ? '<th>추정치</th><th class="mg">이익률</th><th>잠정 실적</th><th class="mg">이익률</th><th>예상 대비</th><th>전년 대비 <small>(YoY)</small></th><th>전분기 대비 <small>(QoQ)</small></th>' : '<th>추정치</th><th class="mg">이익률</th><th>전년 대비 <small>(YoY)</small></th><th>전분기 대비 <small>(QoQ)</small></th>'}</tr></thead><tbody>${estRows}</tbody></table></div>
       ${!r ? '' : r.src === 'dart'
         ? '<p class="en">잠정 실적·전년/전분기 대비는 DART 잠정실적 공시 원문 기준, 예상 대비는 네이버 추정치 기준이에요(시총 5,000억 미만이라 스탁이지 목록에 없는 종목)</p>'
-        : '<p class="en">잠정 실적·예상 대비·전년/전분기 대비는 스탁이지 기준이에요(스탁이지 예상치는 네이버 추정치와 다를 수 있어요)</p>'}${chg}
+        : '<p class="en">잠정 실적·예상 대비·전년/전분기 대비는 스탁이지 기준이에요(스탁이지 예상치는 네이버 추정치와 다를 수 있어요)</p>'}${conf}${chg}
       <h3>주가 흐름 <small>${p.d ? p.d.slice(5).replace('-', '.') + ' 종가 기준' : ''}</small></h3>
       <div class="ecs">${chips.join('') || '<span class="mut">주가 없음</span>'}</div>${react}
       <h3>지난 5분기 실적</h3>

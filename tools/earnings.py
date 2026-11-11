@@ -36,6 +36,7 @@ ROOT, DATA, KST = build.ROOT, build.DATA, build.KST
 SESSION = Path(r"C:\ClaudeCode\.stockeasy_session.json")
 CACHE = ROOT / "raw" / "earnings"
 OUT = DATA / "earnings.json"
+CONF = ROOT / "raw" / "screen" / "confirmed.json"   # screen.py 가 남기는 분기보고서 확정 값 {code|2026.3Q: {d, rc, fs, rev, op, net}}
 BASE = "https://stockeasy.intellio.kr"
 PAST_DAYS = 28            # 지난 발표는 4주 전 월요일부터 담는다 (화면은 이번 주+다음 주 펼침)
 MKT = {"코스닥": "KOSDAQ"}  # 나머지(유가증권·코스피)는 KOSPI
@@ -297,6 +298,24 @@ def price(bars, mc, d0):
     return out
 
 
+def add_conf(items):
+    """잠정 발표는 그대로 두고, 그 분기 분기보고서(DART)가 나왔으면 확정 값을 conf 로 덧붙인다 (사용자 결정 11-11)."""
+    conf = json.loads(CONF.read_text(encoding="utf-8")) if CONF.exists() else {}
+    for x in items:
+        c = conf.get(f"{x['code']}|{x['period']}")
+        x.pop("conf", None)
+        if c:
+            x["conf"] = c
+
+
+def attach_conf():
+    """screen.py 가 끝난 뒤 부른다 — 실적 캘린더 다음 실행을 기다리지 않고 확정 값만 갈아 끼운다."""
+    if OUT.exists():
+        j = json.loads(OUT.read_text(encoding="utf-8"))
+        add_conf(j["items"])
+        OUT.write_text(json.dumps(j, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
 def main():
     CACHE.mkdir(parents=True, exist_ok=True)
     today = datetime.now(KST).date()
@@ -379,6 +398,7 @@ def main():
         out.append(row)
     hpath.write_text(json.dumps(hist, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     out.sort(key=lambda x: (x["date"], x["name"]))
+    add_conf(out)
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "start": start, "items": out},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart})"

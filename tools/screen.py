@@ -145,7 +145,7 @@ def multi(corps, y, q, live, fresh=False):
         rows = get() if fresh else cached(f"multi_{y}_{q}_{hashlib.md5(','.join(part).encode()).hexdigest()[:10]}",
                                           get, fresh_days=1 if live else None)
         for r in rows:
-            nm = {"매출액": "rev", "영업이익": "op"}.get(r.get("account_nm"))
+            nm = {"매출액": "rev", "영업이익": "op", "당기순이익": "net", "당기순이익(손실)": "net"}.get(r.get("account_nm"))
             if not nm:
                 continue
             d = out.setdefault(r["corp_code"], {})
@@ -156,6 +156,7 @@ def multi(corps, y, q, live, fresh=False):
                 d.clear()
                 d["fs"] = fs
             d["rcept"] = r.get("rcept_no")                   # 앞 8자리 = 공시(접수)일
+            d["ccy"] = r.get("currency") or "KRW"            # 외국 기업 24곳은 USD·CNY·JPY·GBP 로 공시
             d[nm] = num(r.get("thstrm_amount"))
             d[nm + "_prev"] = num(r.get("frmtrm_amount"))
             d[nm + "_cum"] = num(r.get("thstrm_add_amount"))
@@ -195,8 +196,8 @@ def quarter_values(corps, y, q, live, fd):
     """분기 3개월 값 {corp: {fs, rev, op, rev_y, op_y}}. 4분기 = 사업보고서 연간 − 3분기 누적."""
     cur, _ = accounts(corps, y, q, live, fd)
     if q != 4:
-        return {c: {"fs": d["fs"], "rev": d.get("rev"), "op": d.get("op"), "rev_y": d.get("rev_prev"), "op_y": d.get("op_prev"),
-                    "rcept": d.get("rcept")} for c, d in cur.items()}
+        return {c: {"fs": d["fs"], "rev": d.get("rev"), "op": d.get("op"), "net": d.get("net"), "rev_y": d.get("rev_prev"),
+                    "op_y": d.get("op_prev"), "rcept": d.get("rcept"), "ccy": d.get("ccy", "KRW")} for c, d in cur.items()}
     q3, _ = accounts(corps, y, 3, False, fd)
     out = {}
     for c, d in cur.items():
@@ -204,9 +205,9 @@ def quarter_values(corps, y, q, live, fd):
         if b.get("fs") != d.get("fs"):
             continue
         sub = lambda a, k: a - b[k] if a is not None and b.get(k) is not None else None  # noqa: E731
-        out[c] = {"fs": d["fs"], "rev": sub(d.get("rev"), "rev_cum"), "op": sub(d.get("op"), "op_cum"),
+        out[c] = {"fs": d["fs"], "rev": sub(d.get("rev"), "rev_cum"), "op": sub(d.get("op"), "op_cum"), "net": sub(d.get("net"), "net_cum"),
                   "rev_y": sub(d.get("rev_prev"), "rev_prev_cum"), "op_y": sub(d.get("op_prev"), "op_prev_cum"),
-                  "rcept": d.get("rcept")}
+                  "rcept": d.get("rcept"), "ccy": d.get("ccy", "KRW")}
     return out
 
 
@@ -669,7 +670,7 @@ def main():
 
     rpath = CACHE / "seen.json"
     reg = json.loads(rpath.read_text(encoding="utf-8")) if rpath.exists() else {"since": today.isoformat(), "q": {}}
-    out_q = []
+    out_q, conf = [], {}
     try:
         fd = feed(today, set(corps))
     except DartBlocked:
@@ -684,6 +685,13 @@ def main():
         except DartBlocked as e:
             print(f"DART_BLOCKED {e} — 1차 자료를 못 받아 기존 screen.json 유지")
             sys.exit(4)
+        for corp, d in cur.items():                                # 실적 캘린더 '확정' 줄용 (억원)
+            rc = d.get("rcept") or ""
+            if corp in code_of and d.get("rev") is not None and len(rc) >= 8:
+                krw = d["ccy"] == "KRW"                            # 외화 공시는 환율이 없어 금액을 싣지 않는다
+                conf[f"{code_of[corp]}|{y}.{q}Q"] = {"d": f"{rc[:4]}-{rc[4:6]}-{rc[6:8]}", "rc": rc, "fs": d["fs"], "ccy": d["ccy"],
+                                                     **{k: None if d.get(k) is None or not krw else round(d[k] / 1e8, 1)
+                                                        for k in ("rev", "op", "net")}}
         pre = prelim(y, q)                                         # 스탁이지(시총 5천억↑)
         has = {code_of[c] for c, d in cur.items() if d.get("rev") is not None and c in code_of}
         try:                                                       # 그 밖의 잠정실적은 DART 공시 원문으로
@@ -816,6 +824,8 @@ def main():
         print(f"  2차 {sum(bool(x['s2'].get('pass')) for x in passed)} · 3차 필수 {sum(bool((x.get('s3') or {}).get('pass')) for x in passed)}"
               + (f" · 확인 못 함 {miss}" if miss else ""))
     rpath.write_text(json.dumps(reg, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    earnings.CONF.write_text(json.dumps(conf, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    earnings.attach_conf()                                         # 실적 캘린더에 분기보고서 확정 값 바로 반영
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "last_annual": last_y,
                                "today": today.isoformat(), "since": reg["since"],
                                "rule": {"rev": MIN_REV, "op": MIN_OP, "turn_drop": TURN_DROP, "issue_years": ISSUE_YEARS},
