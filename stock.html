@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111g">
+<link rel="stylesheet" href="assets/style.css?v=20261111h">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -25,8 +25,10 @@
 
   <div class="head">
     <h1 id="name">…</h1><span class="code" id="code"></span>
-    <a class="nv-link" id="nvLink" target="_blank" rel="noopener" hidden>네이버 증권 ↗</a>
-    <a class="nv-link" id="btLink" target="_blank" rel="noopener" hidden>버틀러 ↗</a>
+    <span class="lk-br" aria-hidden="true"></span>
+    <a class="nv-link" id="nvLink" target="_blank" rel="noopener" hidden><img src="assets/ico/naver.png" alt="">네이버 증권 ↗</a>
+    <a class="nv-link" id="btLink" target="_blank" rel="noopener" hidden><img src="assets/ico/butler.png" alt="">버틀러 ↗</a>
+    <a class="nv-link" id="vlLink" target="_blank" rel="noopener" hidden><img src="assets/ico/valley.png" alt="">밸리 ↗</a>
     <span class="px" id="px"></span><span class="chg" id="chg"></span>
   </div>
   <p class="chart-only" id="chartOnly" hidden></p>
@@ -737,6 +739,8 @@ function renderHead() {
   const nv = document.getElementById('nvLink');            // 네이버 증권 시세 화면으로 바로 (사용자 요청 11-09)
   nv.href = `https://stock.naver.com/domestic/stock/${data.code}/price`; nv.hidden = false;
   const bt = document.getElementById('btLink');            // 버틀러 기업 화면 — DART 고유번호로 바로 (사용자 요청 11-11)
+  const vl = document.getElementById('vlLink');            // 밸리(valley.town) 종목 요약 — 종목코드:KR (사용자 요청 11-11)
+  vl.href = `https://www.valley.town/financials/quote/${data.code}:KR/summary`; vl.hidden = false;
   if (data.corp) { bt.href = `https://www.butler.works/ko/companies/${data.corp}?corpMiddlePanel=dashboard`; bt.hidden = false; }
   const b = data.prices, n = b.length;
   if (n) {
