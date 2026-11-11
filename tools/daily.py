@@ -4,6 +4,7 @@
   1) build.py (Python39-32): 일봉·3개월 구간·통합 목표가(최근 가중)·증권사별 표
   2) analyze.run_async: 3개월 안 리포트 3건 이상 종목 + 이미 정리한 종목, 새 리포트만 추출·의견 정리
   3) index.json 에 종목별 AI 정리 상태를 붙이고 git push (실행 중에도 30분마다)
+  4) 정규 실행이면 prune.run: 매달 첫 저녁 실행에 3개월 넘은 기록을 합침(전체는 PC 보관소), 디스크 5GB 밑이면 알림
 
 --light (CompanyLogLight, 평일 08:30·11:30·14:00): 텔레그램 리포트·네이버·스탁이지만 — DART 를 부르는
 실적 스크리닝·전 종목 매수 에지는 건너뛰고, 실적 캘린더는 받아 둔 DART 원문만 쓴다(--no-dart).
@@ -26,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import analyze as an  # noqa: E402  (stdout 을 utf-8 로 바꿔 둔다)
 import alert  # noqa: E402
+import prune  # noqa: E402
 
 ROOT = an.ROOT
 PY39 = r"C:\Users\admin\AppData\Local\Programs\Python\Python39-32\python.exe"
@@ -179,6 +181,8 @@ async def main_async():
         problems.append(f"의견 정리 실패 {st['summary_fail']}종목")
     if st["missing_lines"]:
         problems.append(f"추출 못 한 줄 {st['missing_lines']}개")
+    if not LIGHT:
+        problems += prune.run(log)          # 매달 첫 저녁 실행: GitHub 3개월치로 정리, 전체는 PC 보관소에
     if problems:
         log("확인 필요: " + " / ".join(problems))
     return problems
