@@ -173,7 +173,7 @@
         <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
-        <button type="button" data-v="new" class="on" aria-pressed="true">최근 3거래일 켜짐 <span id="nEdgeNew"></span></button>
+        <button type="button" data-v="new" class="on" aria-pressed="true">지난주부터 켜짐 <span id="nEdgeNew"></span></button>
         <button type="button" data-v="all" aria-pressed="false">전체 <span id="nEdgeAll"></span></button>
       </div>
       <div class="seg" role="group" aria-label="정렬" id="edgeSort">
@@ -914,7 +914,11 @@ fetch('data/signals.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null
 }).catch(() => {});
 
 // 매수 에지(전 상장사, tools/edges.py) — 미니 차트 카드 (사용자 요청 11-11: 매수만, 최근 켜짐 우선 + 전체·시총 등 정렬)
-const EDGE_NEW = 3, EDGE_PAGE = 30;
+// 기본 범위: 지난주 월요일 이후 켜진 종목 (사용자 요청 11-11 — 최소 전주 것까지). edgeFrom 은 데이터 기준일로 정한다
+const EDGE_PAGE = 30;
+let edgeFrom = '';
+const edgeRecent = x => x.since >= edgeFrom;
+function prevMonday(d) { const t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() - (t.getDay() + 6) % 7 - 7); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 let edges = [], edgeRange = 'new', edgeSort = 'new', edgeF = new Set(), edgeShow = EDGE_PAGE;
 // 시총 5,000억 이하는 기본 화면에서 숨기고 「시총 5,000억 이하」 칩을 눌렀을 때만 (사용자 요청 11-11, 시총 모르면 이하로 본다)
 const EDGE_SMALL = 5000, edgeBig = x => (x.cap || 0) > EDGE_SMALL;
@@ -944,11 +948,11 @@ function edgeSvg(x) {
 const edgeDay = d => `${d.slice(5).replace('-', '.')} (${'일월화수목금토'[new Date(d + 'T00:00:00').getDay()]})`;
 function renderEdge() {
   const pool = edges.filter(x => edgeF.has('small') ? !edgeBig(x) : edgeBig(x));
-  document.getElementById('nEdgeNew').textContent = pool.filter(x => x.run <= EDGE_NEW).length;
+  document.getElementById('nEdgeNew').textContent = pool.filter(edgeRecent).length;
   document.getElementById('nEdgeAll').textContent = pool.length;
-  const base = pool.filter(x => edgeRange === 'all' || x.run <= EDGE_NEW);
+  const base = pool.filter(x => edgeRange === 'all' || edgeRecent(x));
   const rows = base.filter(x => [...edgeF].every(f => EF[f](x))).sort(ES[edgeSort]);
-  const hid = edgeF.has('small') ? 0 : edges.filter(x => (edgeRange === 'all' || x.run <= EDGE_NEW) && !edgeBig(x)).length;
+  const hid = edgeF.has('small') ? 0 : edges.filter(x => (edgeRange === 'all' || edgeRecent(x)) && !edgeBig(x)).length;
   document.getElementById('edgeCount').textContent = `${rows.length}종목` + (hid ? ` · 시총 5,000억 이하 ${hid}종목은 숨김` : '');
   const vis = rows.slice(0, edgeShow);
   // 새로 켜진 순: 켜진 날마다 제목 줄(날짜 · D+n · 종목 수) — 그 안은 시총 큰 순 (사용자 요청 11-11)
@@ -961,7 +965,7 @@ function renderEdge() {
     return `${gh}<li>${o}
       <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 종목 페이지에 리포트까지 나와요">리포트</small>' : ''}</span>
         <span class="edgec up" title="${x.run}거래일째 켜져 있음">${edgeDay(x.since)} D+${x.run}</span></span>
-      <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small>거래대금/일</small>${eok(x.tv)}</span></span>
+      <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small title="최근 20거래일 하루 평균">거래대금 20일 평균</small>${eok(x.tv)}</span></span>
       ${edgeSvg(x)}${cl}</li>`;
   }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
   document.getElementById('edgeBtns').hidden = rows.length <= edgeShow;
@@ -986,6 +990,7 @@ document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; ren
 fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   if (!d) return;
   edges = d.items || [];
+  edgeFrom = prevMonday(d.d);
   const today = edges.filter(x => x.run === 1 && edgeBig(x)).length;
   document.getElementById('edgeSub').textContent = `${d.d.slice(5).replace('-', '.')} 종가 기준 · 전 상장사 ${d.universe.toLocaleString()}종목 중 ${edges.length}종목 · ${d.updated.slice(5).replace('-', '.')} 계산`;
   document.getElementById('tnEdge').textContent = today || '';
