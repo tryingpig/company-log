@@ -573,3 +573,16 @@ details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visibl
 .keyrow .sw.ma60 { height: 3px; }
 .keyrow .eb { display: inline-block; width: 14px; height: 8px; border-radius: 2px; vertical-align: middle; margin: 0 4px 0 2px; }
 .keyrow .eb.up { background: var(--up); } .keyrow .eb.dn { background: var(--down); }
+
+/* 매수 에지 탭 — 미니 차트 카드 */
+.edge-grid { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.edge-card { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 8px; color: inherit; text-decoration: none; }
+.edge-card:hover { border-color: var(--accent); }
+.edge-card .eh { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.edge-card .fn { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edge-card .em { display: block; color: var(--muted); font-size: 12px; margin: 3px 0 6px; }
+.edge-card svg { display: block; width: 100%; height: 92px; }
+#edgeSort { margin-top: 6px; }
+.edge-card .mk { margin-left: 5px; }
+#edgeSort button, #edgeRange button { white-space: nowrap; }
+#edgeSort { max-width: 100%; overflow-x: auto; }

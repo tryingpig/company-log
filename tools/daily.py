@@ -122,6 +122,21 @@ def run_screen():
     return None
 
 
+def run_edges():
+    """전 상장사 매수 에지(edges.py). 장중(10:00) 실행은 스스로 건너뛴다. 실패해도 나머지는 계속."""
+    log("매수 에지 시작")
+    try:
+        r = subprocess.run([PY39, str(ROOT / "tools" / "edges.py")], cwd=ROOT, capture_output=True, timeout=900)
+    except subprocess.TimeoutExpired:
+        return "매수 에지 15분 넘게 걸려 중단 (기존 화면 유지)"
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace")
+    for ln in out.strip().splitlines()[-3:]:
+        log(f"  edges | {ln}")
+    if r.returncode:
+        return f"매수 에지 실패 (exit {r.returncode}) — " + (out.strip().splitlines() or [""])[-1][:200]
+    return None
+
+
 async def main_async():
     t0 = time.time()
     log("build 시작")
@@ -133,6 +148,7 @@ async def main_async():
         raise RuntimeError(f"build.py 실패 (exit {r.returncode})")
     earn_problem = run_earnings()
     scr_problem = run_screen()
+    edge_problem = run_edges()
     push("데이터 빌드")
 
     codes = an.targets(MIN_REPORTS)
@@ -148,7 +164,7 @@ async def main_async():
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")
-    problems = [p for p in (earn_problem, scr_problem) if p]
+    problems = [p for p in (earn_problem, scr_problem, edge_problem) if p]
     if st["stopped"]:
         problems.append(f"{MAX_HOURS}시간 안에 못 끝내고 멈춤 (다음 실행이 이어 감)")
     if st["summary_fail"]:

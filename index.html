@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261110d">
+<link rel="stylesheet" href="assets/style.css?v=20261111a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -30,6 +30,7 @@
     <button type="button" role="tab" id="tab-list" aria-controls="pane-list" aria-selected="true" data-tab="list">종목 목록</button>
     <button type="button" role="tab" id="tab-flips" aria-controls="pane-flips" aria-selected="false" data-tab="flips">의견 전환 <span class="tn" id="tnFlips"></span></button>
     <button type="button" role="tab" id="tab-signals" aria-controls="pane-signals" aria-selected="false" data-tab="signals">거래량 신호 <span class="tn" id="tnSig" title="매수 우위"></span><span class="tn sell" id="tnSell" title="매도 우위"></span></button>
+    <button type="button" role="tab" id="tab-edge" aria-controls="pane-edge" aria-selected="false" data-tab="edge">매수 에지 <span class="tn" id="tnEdge" title="오늘 새로 켜짐"></span></button>
     <button type="button" role="tab" id="tab-earn" aria-controls="pane-earn" aria-selected="false" data-tab="earn">실적 캘린더 <span class="tn" id="tnEarn" title="오늘 발표"></span></button>
     <button type="button" role="tab" id="tab-scr" aria-controls="pane-scr" aria-selected="false" data-tab="scr">실적 스크리닝 <span class="tn" id="tnScr" title="오늘 새로 1차 통과"></span></button>
   </nav>
@@ -151,6 +152,40 @@
       <div class="sc" id="scSell" hidden></div>
       <div class="chips"><button type="button" class="chip" id="sellTrend" aria-pressed="false">상승 추세 중만 (전일 20일선 위)</button></div>
       <div class="panel"><ol class="feed-list sig-list" id="sellList"></ol><div class="feed-btns" id="sellBtns" hidden><button type="button" class="feed-more" id="sellMore">더 보기</button><button type="button" class="feed-more" id="sellLess" hidden>접기</button></div></div>
+    </section>
+  </div>
+
+  <div role="tabpanel" id="pane-edge" aria-labelledby="tab-edge" hidden>
+    <section class="feed" aria-labelledby="edgeHead">
+      <h2 class="feed-h" id="edgeHead">매수 에지 <span class="sub" id="edgeSub"></span></h2>
+      <details class="sig-rule">
+        <summary class="rl-h">▲ 매수 에지 — 전 상장사(보통주)에서 아래를 <b>모두</b> 만족하는 종목</summary>
+        <ol class="rl">
+          <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
+          <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
+        </ol>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(회색)와 5·10·20·60일선, 아래 띠는 매수 에지(빨강)·매도 에지(파랑)였던 날</p>
+      </details>
+      <div class="seg" role="group" aria-label="범위" id="edgeRange">
+        <button type="button" data-v="new" class="on" aria-pressed="true">최근 3거래일 켜짐 <span id="nEdgeNew"></span></button>
+        <button type="button" data-v="all" aria-pressed="false">전체 <span id="nEdgeAll"></span></button>
+      </div>
+      <div class="seg" role="group" aria-label="정렬" id="edgeSort">
+        <button type="button" data-v="new" class="on" aria-pressed="true">새로 켜진 순</button>
+        <button type="button" data-v="cap" aria-pressed="false">시총 순</button>
+        <button type="button" data-v="chg" aria-pressed="false">켜진 뒤 상승률</button>
+        <button type="button" data-v="tv" aria-pressed="false">거래대금 순</button>
+      </div>
+      <div class="chips" id="edgeChips">
+        <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
+        <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
+        <button type="button" class="chip" data-f="cap1t" aria-pressed="false">시총 1조↑</button>
+        <button type="button" class="chip" data-f="cap1k" aria-pressed="false">시총 1,000억↑</button>
+        <button type="button" class="chip" data-f="nolog" aria-pressed="false">리포트 로그에 없는 종목만</button>
+      </div>
+      <p class="mut" id="edgeCount"></p>
+      <ul class="edge-grid" id="edgeList"></ul>
+      <div class="feed-btns" id="edgeBtns" hidden><button type="button" class="feed-more" id="edgeMore">더 보기</button></div>
     </section>
   </div>
 
@@ -363,7 +398,7 @@ function edgeBadge(s) {
 }
 
 // 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 / 실적 캘린더 (주소 끝 #flips · #signals · #earn 으로 바로 열기)
-const TABS = ['list', 'flips', 'signals', 'earn', 'scr'];
+const TABS = ['list', 'flips', 'signals', 'edge', 'earn', 'scr'];
 function showTab(t) {
   if (!TABS.includes(t)) t = 'list';
   document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
@@ -826,6 +861,69 @@ fetch('data/signals.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null
   document.getElementById('nBuy').textContent = sigs.length;
   document.getElementById('nSell').textContent = sells.length;
   renderSig(); renderSell();
+}).catch(() => {});
+
+// 매수 에지(전 상장사, tools/edges.py) — 미니 차트 카드 (사용자 요청 11-11: 매수만, 최근 켜짐 우선 + 전체·시총 등 정렬)
+const EDGE_NEW = 3, EDGE_PAGE = 30;
+let edges = [], edgeRange = 'new', edgeSort = 'new', edgeF = new Set(), edgeShow = EDGE_PAGE;
+const EF = {KOSPI: x => x.market === 'KOSPI', KOSDAQ: x => x.market === 'KOSDAQ', cap1t: x => (x.cap || 0) >= 10000,
+  cap1k: x => (x.cap || 0) >= 1000, nolog: x => !x.inlog};
+const ES = {new: (a, b) => a.run - b.run || (b.cap || 0) - (a.cap || 0), cap: (a, b) => (b.cap || 0) - (a.cap || 0),
+  chg: (a, b) => b.chg - a.chg, tv: (a, b) => b.tv - a.tv};
+function edgeSvg(x) {
+  const W = 300, H = 84, B = 6, n = x.e.length, c = x.c, off = c.length - n;
+  const ma = k => c.map((_, i) => i < k - 1 ? null : c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k).slice(off);
+  const lines = [[c.slice(off), '--text-2', 1.2], [ma(60), '--ma60', 1.6], [ma(20), '--ma20', 1], [ma(10), '--ma10', 1], [ma(5), '--ma5', 1]];
+  const all = lines.flatMap(l => l[0]).filter(v => v != null), lo = Math.min(...all), hi = Math.max(...all), sp = hi - lo || 1;
+  const X = i => (i / (n - 1) * W).toFixed(1), Y = v => (2 + (1 - (v - lo) / sp) * (H - 4)).toFixed(1);
+  const path = a => a.map((v, i) => v == null ? '' : `${X(i)},${Y(v)}`).filter(Boolean).join(' ');
+  const bw = W / n;
+  const band = [...x.e].map((s, i) => s === '.' ? '' : `<rect x="${(i * bw).toFixed(1)}" y="${H + 3}" width="${(bw + 0.3).toFixed(1)}" height="${B}" fill="var(${s === '+' ? '--up' : '--down'})"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H + B + 3}" preserveAspectRatio="none" role="img" aria-label="${esc(x.name)} 최근 3개월 종가와 이동평균선">
+    ${lines.map(([a, col, w]) => `<polyline fill="none" stroke="var(${col})" stroke-width="${w}" vector-effect="non-scaling-stroke" points="${path(a)}"/>`).join('')}
+    <rect x="0" y="${H + 3}" width="${W}" height="${B}" fill="var(--line)"/>${band}</svg>`;
+}
+function renderEdge() {
+  const base = edges.filter(x => edgeRange === 'all' || x.run <= EDGE_NEW);
+  const rows = base.filter(x => [...edgeF].every(f => EF[f](x))).sort(ES[edgeSort]);
+  document.getElementById('edgeCount').textContent = `${rows.length}종목`;
+  const vis = rows.slice(0, edgeShow);
+  document.getElementById('edgeList').innerHTML = vis.map(x => {
+    const href = x.inlog ? `stock.html?code=${x.code}` : `https://m.stock.naver.com/domestic/stock/${x.code}/total`;
+    return `<li><a class="edge-card" href="${href}"${x.inlog ? '' : ' target="_blank" rel="noopener"'}>
+      <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
+        <span class="edgec up" title="${x.since.slice(5).replace('-', '.')}부터">▲ ${x.run}일째</span></span>
+      <span class="em">${x.since.slice(5).replace('-', '.')} 켜짐 · 켜진 뒤 ${pc(x.chg)} · 시총 ${x.cap ? eok(x.cap) : '-'} · 거래대금 ${eok(x.tv)}/일</span>
+      ${edgeSvg(x)}</a></li>`;
+  }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
+  document.getElementById('edgeBtns').hidden = rows.length <= edgeShow;
+}
+function edgeSeg(id, set) {
+  document.getElementById(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll(`#${id} button`).forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+    set(b.dataset.v); edgeShow = EDGE_PAGE; renderEdge();
+  });
+}
+edgeSeg('edgeRange', v => { edgeRange = v; });
+edgeSeg('edgeSort', v => { edgeSort = v; });
+document.getElementById('edgeChips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  const f = b.dataset.f, pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', cap1t: 'cap1k', cap1k: 'cap1t'}[f];
+  if (edgeF.has(f)) edgeF.delete(f); else { edgeF.add(f); if (pair) edgeF.delete(pair); }
+  document.querySelectorAll('#edgeChips .chip').forEach(c => c.setAttribute('aria-pressed', edgeF.has(c.dataset.f)));
+  edgeShow = EDGE_PAGE; renderEdge();
+});
+document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; renderEdge(); };
+fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
+  if (!d) return;
+  edges = d.items || [];
+  const nNew = edges.filter(x => x.run <= EDGE_NEW).length, today = edges.filter(x => x.run === 1).length;
+  document.getElementById('edgeSub').textContent = `${d.d.slice(5).replace('-', '.')} 종가 기준 · 전 상장사 ${d.universe.toLocaleString()}종목 중 ${edges.length}종목 · ${d.updated.slice(5).replace('-', '.')} 계산`;
+  document.getElementById('nEdgeNew').textContent = nNew;
+  document.getElementById('nEdgeAll').textContent = edges.length;
+  document.getElementById('tnEdge').textContent = today || '';
+  renderEdge();
 }).catch(() => {});
 
 // 최근 의견 전환: 같은 증권사가 직전 리포트와 반대 방향(상향↔하향)으로 낸 리포트, 최신순
