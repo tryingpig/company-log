@@ -170,7 +170,7 @@
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
           <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
         </ol>
-        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
         <button type="button" data-v="new" class="on" aria-pressed="true">최근 3거래일 켜짐 <span id="nEdgeNew"></span></button>
@@ -186,7 +186,7 @@
         <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
         <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
         <button type="button" class="chip" data-f="cap1t" aria-pressed="false">시총 1조↑</button>
-        <button type="button" class="chip" data-f="cap1k" aria-pressed="false">시총 1,000억↑</button>
+        <button type="button" class="chip" data-f="small" aria-pressed="false">시총 5,000억 이하</button>
         <button type="button" class="chip" data-f="nolog" aria-pressed="false">리포트 로그에 없는 종목만</button>
       </div>
       <p class="mut" id="edgeCount"></p>
@@ -916,8 +916,10 @@ fetch('data/signals.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null
 // 매수 에지(전 상장사, tools/edges.py) — 미니 차트 카드 (사용자 요청 11-11: 매수만, 최근 켜짐 우선 + 전체·시총 등 정렬)
 const EDGE_NEW = 3, EDGE_PAGE = 30;
 let edges = [], edgeRange = 'new', edgeSort = 'new', edgeF = new Set(), edgeShow = EDGE_PAGE;
+// 시총 5,000억 이하는 기본 화면에서 숨기고 「시총 5,000억 이하」 칩을 눌렀을 때만 (사용자 요청 11-11, 시총 모르면 이하로 본다)
+const EDGE_SMALL = 5000, edgeBig = x => (x.cap || 0) > EDGE_SMALL;
 const EF = {KOSPI: x => x.market === 'KOSPI', KOSDAQ: x => x.market === 'KOSDAQ', cap1t: x => (x.cap || 0) >= 10000,
-  cap1k: x => (x.cap || 0) >= 1000, nolog: x => !x.inlog};
+  small: x => !edgeBig(x), nolog: x => !x.inlog};
 const ES = {new: (a, b) => a.run - b.run || (b.cap || 0) - (a.cap || 0), cap: (a, b) => (b.cap || 0) - (a.cap || 0),
   chg: (a, b) => b.chg - a.chg, tv: (a, b) => b.tv - a.tv};
 function edgeSvg(x) {
@@ -941,9 +943,13 @@ function edgeSvg(x) {
 // 켜진 날 '11.11 (수)' — D+n 은 켜진 날을 1로 센 거래일 수
 const edgeDay = d => `${d.slice(5).replace('-', '.')} (${'일월화수목금토'[new Date(d + 'T00:00:00').getDay()]})`;
 function renderEdge() {
-  const base = edges.filter(x => edgeRange === 'all' || x.run <= EDGE_NEW);
+  const pool = edges.filter(x => edgeF.has('small') ? !edgeBig(x) : edgeBig(x));
+  document.getElementById('nEdgeNew').textContent = pool.filter(x => x.run <= EDGE_NEW).length;
+  document.getElementById('nEdgeAll').textContent = pool.length;
+  const base = pool.filter(x => edgeRange === 'all' || x.run <= EDGE_NEW);
   const rows = base.filter(x => [...edgeF].every(f => EF[f](x))).sort(ES[edgeSort]);
-  document.getElementById('edgeCount').textContent = `${rows.length}종목`;
+  const hid = edgeF.has('small') ? 0 : edges.filter(x => (edgeRange === 'all' || x.run <= EDGE_NEW) && !edgeBig(x)).length;
+  document.getElementById('edgeCount').textContent = `${rows.length}종목` + (hid ? ` · 시총 5,000억 이하 ${hid}종목은 숨김` : '');
   const vis = rows.slice(0, edgeShow);
   // 새로 켜진 순: 켜진 날마다 제목 줄(날짜 · D+n · 종목 수) — 그 안은 시총 큰 순 (사용자 요청 11-11)
   const nRun = {}; rows.forEach(x => { nRun[x.run] = (nRun[x.run] || 0) + 1; });
@@ -971,7 +977,7 @@ edgeSeg('edgeRange', v => { edgeRange = v; });
 edgeSeg('edgeSort', v => { edgeSort = v; });
 document.getElementById('edgeChips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if (!b) return;
-  const f = b.dataset.f, pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', cap1t: 'cap1k', cap1k: 'cap1t'}[f];
+  const f = b.dataset.f, pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI', cap1t: 'small', small: 'cap1t'}[f];
   if (edgeF.has(f)) edgeF.delete(f); else { edgeF.add(f); if (pair) edgeF.delete(pair); }
   document.querySelectorAll('#edgeChips .chip').forEach(c => c.setAttribute('aria-pressed', edgeF.has(c.dataset.f)));
   edgeShow = EDGE_PAGE; renderEdge();
@@ -980,10 +986,8 @@ document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; ren
 fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   if (!d) return;
   edges = d.items || [];
-  const nNew = edges.filter(x => x.run <= EDGE_NEW).length, today = edges.filter(x => x.run === 1).length;
+  const today = edges.filter(x => x.run === 1 && edgeBig(x)).length;
   document.getElementById('edgeSub').textContent = `${d.d.slice(5).replace('-', '.')} 종가 기준 · 전 상장사 ${d.universe.toLocaleString()}종목 중 ${edges.length}종목 · ${d.updated.slice(5).replace('-', '.')} 계산`;
-  document.getElementById('nEdgeNew').textContent = nNew;
-  document.getElementById('nEdgeAll').textContent = edges.length;
   document.getElementById('tnEdge').textContent = today || '';
   renderEdge();
 }).catch(() => {});
