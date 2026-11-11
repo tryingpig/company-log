@@ -51,6 +51,7 @@ def write_charts(items, bars, now):
     mpath = DATA / "market.json"
     mdata = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
     CHARTS.mkdir(parents=True, exist_ok=True)
+    corps = json.loads(build.CORPS.read_text(encoding="utf-8")) if build.CORPS.exists() else {}
     keep = set()
     for x in items:
         b = bars[x["code"]]
@@ -62,6 +63,7 @@ def write_charts(items, bars, now):
         (CHARTS / f"{x['code']}.json").write_text(json.dumps({
             "code": x["code"], "name": x["name"], "updated": now.strftime("%Y-%m-%d %H:%M"), "market": x["market"],
             "chart_only": True, "cap": x["cap"],
+            "corp": (corps.get(x["code"]) or {}).get("corp_code"),
             "signals": build.strength_signals_mc(b, mc) if mc else [], "sells": build.sell_signals(b),
             "edges": "".join({1: "+", -1: "-", 0: "."}[v] for v in st),
             "close": b[-1]["c"], "close_date": b[-1]["d"], "consensus": None, "brokers": [],

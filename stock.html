@@ -26,6 +26,7 @@
   <div class="head">
     <h1 id="name">…</h1><span class="code" id="code"></span>
     <a class="nv-link" id="nvLink" target="_blank" rel="noopener" hidden>네이버 증권 ↗</a>
+    <a class="nv-link" id="btLink" target="_blank" rel="noopener" hidden>버틀러 ↗</a>
     <span class="px" id="px"></span><span class="chg" id="chg"></span>
   </div>
   <p class="chart-only" id="chartOnly" hidden></p>
@@ -735,6 +736,8 @@ function renderHead() {
   document.getElementById('code').textContent = data.code;
   const nv = document.getElementById('nvLink');            // 네이버 증권 시세 화면으로 바로 (사용자 요청 11-09)
   nv.href = `https://stock.naver.com/domestic/stock/${data.code}/price`; nv.hidden = false;
+  const bt = document.getElementById('btLink');            // 버틀러 기업 화면 — DART 고유번호로 바로 (사용자 요청 11-11)
+  if (data.corp) { bt.href = `https://www.butler.works/ko/companies/${data.corp}?corpMiddlePanel=dashboard`; bt.hidden = false; }
   const b = data.prices, n = b.length;
   if (n) {
     document.getElementById('px').textContent = fmt(b[n - 1].c) + '원';

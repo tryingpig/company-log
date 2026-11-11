@@ -28,6 +28,8 @@ RAW_DUMP = ROOT / "raw" / "epic_messages.json"
 RAW_LIVE = ROOT / "raw" / "epic_live.jsonl"
 DATA = ROOT / "data"
 STOCKS = DATA / "stocks"
+# DART 고유번호(corp_code) — 종목 페이지의 버틀러 링크(butler.works/ko/companies/{corp_code})용 (사용자 요청 11-11)
+CORPS = Path(r"C:\ClaudeCode\tryingpig.github.io\.claude\skills\dart-financials\cache\corp_codes.json")
 SIGNAL_LOG = DATA / "signal_log.json"     # 거래량 신호 + 신호 뒤 결과 누적 기록 (지우지 않음)
 NAMES = DATA / "_names.json"          # 종목명 → 코드 캐시 (못 찾은 것은 null)
 UNIVERSE = Path(r"C:\ClaudeCode\EpicAI-Monitor\_universe.json")
@@ -429,6 +431,7 @@ def main():
         else:
             print(f"지수 수집 실패: {[m for m, v in got.items() if not v]} (기존 market.json 유지)")
     uni = json.loads(UNIVERSE.read_text(encoding="utf-8")) if UNIVERSE.exists() else {}
+    corps = json.loads(CORPS.read_text(encoding="utf-8")) if CORPS.exists() else {}
     mdata = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else {}
     mclose = {m: {x["d"]: x["c"] for x in mdata.get(m, [])} for m in MARKETS}
 
@@ -545,6 +548,7 @@ def main():
                         r_ = pct(bars[i + h]["c"], bars[i]["c"])
                         base[h].append((r_, r_ - pct(mc_[bars[i + h]["d"]], mc_[bars[i]["d"]])))
         path.write_text(json.dumps({"code": code, "name": v["name"], "updated": now, "market": market,
+                                    "corp": (corps.get(code) or {}).get("corp_code") or old.get("corp"),
                                     "signals": sigs, "sells": sells,
                                     "edges": "".join({1: "+", -1: "-", 0: "."}[x] for x in edges),
                                     "close": close, "close_date": bars[-1]["d"] if bars else None,
