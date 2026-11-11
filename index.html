@@ -16,16 +16,14 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111b">
+<link rel="stylesheet" href="assets/style.css?v=20261111c">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-<div class="wrap wide">
-  <header class="top">
-    <h1>📒 Company Log</h1>
-    <span class="meta" id="updated"></span>
-  </header>
-
+<!-- 상단 메뉴 바 — Premium Contents 처럼 PC 는 메뉴 줄, 폰은 '현재 메뉴 ▾' + 펼침 목록 (사용자 요청 11-11) -->
+<header class="appbar">
+  <div class="appbar-in">
+  <a class="brand" href="./" aria-label="Company Log 처음으로">📒<span class="bt"> Company Log</span></a>
   <nav class="tabs" role="tablist" aria-label="보기">
     <button type="button" role="tab" id="tab-list" aria-controls="pane-list" aria-selected="true" data-tab="list">종목 목록</button>
     <button type="button" role="tab" id="tab-flips" aria-controls="pane-flips" aria-selected="false" data-tab="flips">의견 전환 <span class="tn" id="tnFlips"></span></button>
@@ -34,6 +32,14 @@
     <button type="button" role="tab" id="tab-earn" aria-controls="pane-earn" aria-selected="false" data-tab="earn">실적 캘린더 <span class="tn" id="tnEarn" title="오늘 발표"></span></button>
     <button type="button" role="tab" id="tab-scr" aria-controls="pane-scr" aria-selected="false" data-tab="scr">실적 스크리닝 <span class="tn" id="tnScr" title="오늘 새로 1차 통과"></span></button>
   </nav>
+  <button type="button" class="pick" id="pick" aria-haspopup="true" aria-expanded="false" aria-controls="sheet"></button>
+  </div>
+</header>
+<div class="sheet-dim" id="sheetDim" hidden></div>
+<nav class="sheet" id="sheet" aria-label="메뉴" hidden></nav>
+
+<div class="wrap wide">
+  <p class="meta top-meta" id="updated"></p>
 
   <div role="tabpanel" id="pane-scr" aria-labelledby="tab-scr" hidden>
     <section class="feed" aria-labelledby="scrHead">
@@ -418,6 +424,40 @@ document.querySelector('.tabs').addEventListener('keydown', e => {
   n.focus(); showTab(n.dataset.tab);
 });
 addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
+// 폰 메뉴: 탭 버튼을 그대로 옮겨 '현재 메뉴 ▾' 와 펼침 목록을 만든다 (숫자 배지는 탭 버튼 것을 복사)
+const MENU_DESC = {list: '리포트 로그 종목 · 목표가·의견', flips: '같은 증권사 상향↔하향', signals: '강도·거래량 / 매도 우위 대량 거래',
+  edge: '전 상장사 · 이평선 정배열 + 모두 상승', earn: '발표 일정 · 추정치 · 잠정 실적', scr: '전 상장사 실적 1~3차 거르기'};
+function tabBadges(b) { return [...b.querySelectorAll('.tn')].filter(t => t.textContent).map(t => `<span class="${t.className}${b.dataset.tab === 'flips' ? ' imp' : ''}">${t.textContent}</span>`).join(''); }
+function tabName(b) { return [...b.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim(); }
+function menuSync() {
+  const tabs = [...document.querySelectorAll('.tabs [role=tab]')], cur = tabs.find(b => b.getAttribute('aria-selected') === 'true') || tabs[0];
+  document.getElementById('pick').innerHTML = `<span class="nm">${tabName(cur)}</span>${tabBadges(cur)}<span class="car">▾</span>`;
+  document.getElementById('sheet').innerHTML = tabs.map(b => `<a href="#${b.dataset.tab === 'list' ? '' : b.dataset.tab}" data-tab="${b.dataset.tab}" class="${b === cur ? 'on' : ''}">
+    <span class="mt"><span class="nm">${tabName(b)}</span>${tabBadges(b)}</span><span class="md">${MENU_DESC[b.dataset.tab] || ''}</span></a>`).join('');
+}
+function sheetOpen(on) {
+  document.getElementById('sheet').hidden = !on; document.getElementById('sheetDim').hidden = !on;
+  document.getElementById('pick').setAttribute('aria-expanded', on);
+}
+document.getElementById('pick').addEventListener('click', () => sheetOpen(document.getElementById('sheet').hidden));
+document.getElementById('sheetDim').addEventListener('click', () => sheetOpen(false));
+document.getElementById('sheet').addEventListener('click', e => {
+  const a = e.target.closest('a'); if (!a) return;
+  e.preventDefault(); showTab(a.dataset.tab); sheetOpen(false); scrollTo(0, 0);
+});
+addEventListener('keydown', e => { if (e.key === 'Escape') sheetOpen(false); });
+new MutationObserver(menuSync).observe(document.querySelector('.tabs'), {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-selected']});
+menuSync();
+// 폰에서 내려 읽을 땐 메뉴 바를 접고, 올리면 다시 (Premium Contents 와 같은 동작)
+let barY = 0;
+addEventListener('scroll', () => {
+  const y = scrollY, bar = document.querySelector('.appbar');
+  if (!document.getElementById('sheet').hidden) return;
+  if (y > 140 && y > barY + 6) bar.classList.add('hide');
+  else if (y < barY - 6 || y < 90) bar.classList.remove('hide');
+  barY = y;
+}, {passive: true});
 showTab(location.hash.slice(1));
 
 // 강도·거래량 신호 탭
