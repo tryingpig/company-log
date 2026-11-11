@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111d">
+<link rel="stylesheet" href="assets/style.css?v=20261111e">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -938,6 +938,8 @@ function edgeSvg(x) {
     ${shade}${lines.map(([a, col, w]) => `<polyline fill="none" stroke="var(${col})" stroke-width="${w}" vector-effect="non-scaling-stroke" points="${path(a)}"/>`).join('')}
     <rect x="0" y="${H + 3}" width="${W}" height="${B}" fill="var(--line)"/>${band}</svg>`;
 }
+// 켜진 날 '11.11 (수)' — D+n 은 켜진 날을 1로 센 거래일 수
+const edgeDay = d => `${d.slice(5).replace('-', '.')} (${'일월화수목금토'[new Date(d + 'T00:00:00').getDay()]})`;
 function renderEdge() {
   const base = edges.filter(x => edgeRange === 'all' || x.run <= EDGE_NEW);
   const rows = base.filter(x => [...edgeF].every(f => EF[f](x))).sort(ES[edgeSort]);
@@ -948,8 +950,8 @@ function renderEdge() {
     const [o, cl] = x.inlog ? [`<a class="edge-card" href="stock.html?code=${x.code}">`, '</a>'] : ['<div class="edge-card">', '</div>'];
     return `<li>${o}
       <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 누르면 종목 페이지">리포트</small>' : ''}</span>
-        <span class="edgec up" title="${x.since.slice(5).replace('-', '.')}부터">▲ ${x.run}일째</span></span>
-      <span class="em">${x.since.slice(5).replace('-', '.')} 켜짐 · 켜진 뒤 ${pc(x.chg)} · 시총 ${x.cap ? eok(x.cap) : '-'} · 거래대금 ${eok(x.tv)}/일</span>
+        <span class="edgec up" title="${x.run}거래일째 켜져 있음">${edgeDay(x.since)} D+${x.run}</span></span>
+      <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small>거래대금/일</small>${eok(x.tv)}</span></span>
       ${edgeSvg(x)}${cl}</li>`;
   }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
   document.getElementById('edgeBtns').hidden = rows.length <= edgeShow;
