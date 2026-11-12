@@ -802,7 +802,7 @@ function renderCompany(fin, biz) {
           <div class="ca-lg"><span><i style="background:var(--ma10)"></i>매출총이익률</span><span><i style="background:var(--ma5)"></i>영업이익률</span></div>
           <div class="ca-c" data-k="mg"></div></figure>
       </div>
-      <p class="ca-src">실적·추정: 스탁이지(${esc(fin.fetched)} 조회) · 매출총이익률 추정치는 제공처가 없어 실적 연도까지만 · <span class="est-key"></span> 옅은 막대 = 추정</p>`);
+      <p class="ca-src">실적: ${fin.act_src === 'DART' ? 'DART 사업보고서 재무제표 · 매출총이익 = 매출 − 매출원가, 이익률은 직접 계산' : esc(fin.act_src || '스탁이지')}${est.length ? ` · 추정: ${esc(fin.est_src || '스탁이지')}(${esc(fin.fetched)} 조회), 매출총이익률 추정치는 제공처가 없어 실적 연도까지만 · <span class="est-key"></span> 옅은 막대 = 추정` : fin.est_wait ? ' · 증권사 추정치는 순서대로 받는 중' : ' · 증권사 추정치 없음'}</p>`);
   }
   if (!parts.length) return;
   document.getElementById('caSub').textContent = parts.join(' · ');
