@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261113c">
+<link rel="stylesheet" href="assets/style.css?v=20261113d">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -657,59 +657,119 @@ function revisionBlock(g) {
     ${rows}</div>`;
 }
 
+// 앞을 보는 숫자 (사용자 요청 11-13): 한눈에 카드 → 리비전 히트맵(칸 누르면 증권사별) → 목표가 근거 요약(표는 접기) → 일정
+const fwPer = p => p === '12M Fwd' ? 2026.5 : /^20\d\d$/.test(p) ? +p : 9999;
+let fwG = {};
+function fwTiles(ann, bs, cur) {
+  const up = ann.reduce((s, g) => s + g.up, 0), dn = ann.reduce((s, g) => s + g.down, 0), tiles = [];
+  if (ann.length) {
+    const key = ann.filter(g => g.item === '영업이익').sort((x, y) => y.n - x.n)[0] || [...ann].sort((x, y) => y.n - x.n)[0];
+    tiles.push(`<div class="fw-tile"><span class="k">최근 3개월 추정치 방향</span>
+      <span class="big ${up > dn ? 'pos' : up < dn ? 'neg' : ''}">${up > dn ? '상향 우세' : up < dn ? '하향 우세' : '엇갈림'} · ▲${up} ▼${dn}</span>
+      <span class="s">대표: ${perName(key.period)} ${esc(key.item)}${key.avg != null ? ` 가중 평균 <b class="${pctCls(key.avg)}">${pctTxt(key.avg)}</b>` : ''} (${key.n}곳)</span></div>`);
+  }
+  if (bs.length) {
+    const yc = {};
+    bs.forEach(b => { const k = b.year ? perName(b.year) : '미기재'; yc[k] = (yc[k] || 0) + 1; });
+    const top = Object.entries(yc).filter(([k]) => k !== '미기재').sort((x, y) => y[1] - x[1]);
+    const all = Object.entries(yc).sort((x, y) => (x[0] === '미기재') - (y[0] === '미기재') || y[1] - x[1]);
+    if (top.length) tiles.push(`<div class="fw-tile"><span class="k">목표가가 보는 해</span><span class="big">${top[0][0]} 중심</span>
+      <span class="s">${all.map(([k, n]) => `${k} ${n}곳`).join(' · ')}</span></div>`);
+  }
+  // 현재가 기준 배수 vs 같은 기준 연도로 증권사가 적용한 배수 — 기준 연도를 맞춰 비교
+  let best = null;
+  for (const c of cur || []) {
+    const v = bs.filter(b => b.method === c.label && b.year === c.period && b.multiple != null).map(b => b.multiple);
+    if (v.length && (!best || v.length > best.v.length)) best = {c, v};
+  }
+  if (best) {
+    const {c, v} = best, avg = v.reduce((s, x) => s + x, 0) / v.length, hi = Math.max(avg, c.multiple, ...v) * 1.1;
+    const x = n => (n / hi * 100).toFixed(1), lo = Math.min(c.multiple, avg), top2 = Math.max(c.multiple, avg);
+    tiles.push(`<div class="fw-tile"><span class="k">${perName(c.period)} ${c.label} · 현재가 기준 vs 증권사 적용</span>
+      <span class="big">${fmtVal(c.multiple, '배')} <small>vs</small> ${fmtVal(avg, '배')}</span>
+      <div class="fw-vbar"><span class="tr"></span><span class="fill" style="left:${x(lo)}%;width:${(x(top2) - x(lo)).toFixed(1)}%"></span>
+        <span class="m now" style="left:${x(c.multiple)}%"></span><span class="m app" style="left:${x(avg)}%"></span></div>
+      <div class="fw-vleg"><span><i class="now"></i>현재 <b>${fmtVal(c.multiple, '배')}</b></span><span><i class="app"></i>적용 평균 <b>${fmtVal(avg, '배')}</b> (${v.length}곳)</span></div></div>`);
+  }
+  return tiles.length ? `<div class="fw-tiles">${tiles.join('')}</div>` : '';
+}
+function fwHeat(ann) {
+  fwG = {};
+  ann.forEach(g => { fwG[g.item + '|' + g.period] = g; });
+  const ORD = ['매출액', '영업이익', '지배순이익', '순이익', '세전이익', 'EPS', 'BPS', 'ROE', 'OPM', '적용 PER', '적용 PBR'];
+  const items = [...new Set(ann.map(g => g.item))].sort((x, y) => (ORD.indexOf(x) + 1 || 99) - (ORD.indexOf(y) + 1 || 99));
+  const pers = [...new Set(ann.map(g => g.period))].sort((p, q) => fwPer(p) - fwPer(q));
+  const bg = v => v == null ? 'transparent' : `color-mix(in srgb, var(${v >= 0 ? '--up' : '--down'}) ${(Math.min(Math.abs(v), 25) / 25 * 38 + 6).toFixed(0)}%, transparent)`;
+  return `<div class="fw-hw"><table class="fw-hm"><thead><tr><th></th>${pers.map(p => `<th>${esc(perName(p))}</th>`).join('')}</tr></thead><tbody>
+    ${items.map(it => `<tr><td>${esc(it)}</td>${pers.map(p => { const g = fwG[it + '|' + p];
+      return g ? `<td class="hc" data-k="${esc(it + '|' + p)}" style="background:${bg(g.avg)}"><b class="${g.avg == null ? '' : pctCls(g.avg)}">${g.avg != null ? pctTxt(g.avg) : '방향만'}</b><small>▲${g.up} ▼${g.down}</small></td>` : '<td class="na">·</td>'; }).join('')}</tr>`).join('')}
+    </tbody></table></div>`;
+}
+function fwToggle(c) {
+  const box = c.closest('.fw-hw'), tr = c.closest('tr'), old = box.querySelector('tr.fw-pop'), same = old && old.dataset.k === c.dataset.k;
+  old?.remove(); box.querySelectorAll('td.on').forEach(x => x.classList.remove('on'));
+  if (same) return;
+  c.classList.add('on');
+  const g = fwG[c.dataset.k], rows = g.rows.filter(r => r.latest !== false), olds = g.rows.length - rows.length;
+  tr.insertAdjacentHTML('afterend', `<tr class="fw-pop" data-k="${esc(c.dataset.k)}"><td colspan="${box.querySelectorAll('thead th').length}"><div class="in">
+    <div class="ph"><b>${esc(perName(g.period))} ${esc(g.item)}</b> · 증권사별 가장 최근 변경 ${rows.length}곳${olds ? ` · 같은 증권사 이전 변경 ${olds}건 생략` : ''}</div>
+    <div class="rvl">${rows.map(r => `<div title="${esc(r.raw || '')}"><span class="b">${chip(r.id, esc(r.broker))}<i>${r.date.slice(5)}</i></span>
+      <span class="v">${r.prev != null && r.value != null ? `${money(r.prev, r.unit, false)} → <b>${r.calc === 'value' ? '≈' : ''}${money(r.value, r.unit, true)}</b>` : `<span class="muted">${r.pct != null ? '절대값 미기재' : '수치 미기재'}</span>`}</span>
+      <span class="p ${r.pct != null ? pctCls(r.pct) : (r.dir === 'up' ? 'pos' : 'neg')}">${r.pct != null ? pctTxt(r.pct) : (r.dir === 'up' ? '▲' : '▼')}</span></div>`).join('')}</div></div></td></tr>`);
+  box.querySelector('tr.fw-pop .in').style.width = (box.clientWidth - 24) + 'px';
+}
+document.addEventListener('click', e => { const c = e.target.closest('.fw-hm td.hc'); if (c && !e.target.closest('a')) fwToggle(c); });
+
 function renderForward() {
   const el = document.getElementById('forward'), a = analysis;
   if (!a || !a.revisions) { el.innerHTML = '<div class="ai-note" style="margin:0">AI 정리 준비 중이에요</div>'; return; }
-  let html = '';
-
-  // ① 추정치 리비전: 연간·선행(28E → 27E → 12M Fwd → 26E) 먼저, 분기·기간 미상은 접어 둔다
   const annual = a.revisions.filter(g => g.kind === 'annual'), other = a.revisions.filter(g => g.kind !== 'annual');
-  html += `<h3 class="h3" style="margin-top:0">추정치 리비전 <span class="sub">연간·선행 추정치를 바꾼 기록 · 평균은 증권사별 가장 최근 리비전을 최근일수록 크게 반영 · 흐린 행 = 같은 증권사의 이전 리비전 · 행에 마우스를 올리면 원문 구절</span></h3>`;
-  if (annual.length) {
-    const head = annual.slice(0, 6), rest = annual.slice(6);
-    html += `<div class="rv-grid">${head.map(revisionBlock).join('')}</div>`;
-    if (rest.length) html += `<details class="more"><summary>연간 리비전 ${rest.length}개 더 보기</summary><div class="rv-grid">${rest.map(revisionBlock).join('')}</div></details>`;
-  } else html += `<div class="ai-note" style="margin:0">로그에 연간·선행 추정치 변경 기록이 없어요</div>`;
-  if (other.length) html += `<details class="more"><summary>분기·기간 미기재 리비전 ${other.length}개</summary><div class="rv-grid">${other.map(revisionBlock).join('')}</div></details>`;
-  html += `<div class="ai-note">출처 — 표시 없음: 원문 기존→변경 값 · 변화율/방향만: 원문에 절대값 없음 · 직전 대비 계산·값은 계산: 같은 증권사 직전 리포트 값으로 코드가 계산</div>`;
-
-  // ② 목표가 근거 연도 + 현재가 기준 배수
   const bs = a.basis_latest || [];
-  const yearTxt = b => !b.year ? '-' : perName(b.year) + (b.year_src === '문맥' ? '<small class="muted">(문맥)</small>' : '');
-  html += `<h3 class="h3">목표가는 어느 해를 보고 있나 <span class="sub">증권사별 가장 최근 리포트의 산정 근거 · (문맥) = 줄에 연도가 없어 같은 증권사 리포트 문맥으로 판단, 마우스를 올리면 근거 구절</span></h3>`;
+  let html = fwTiles(annual, bs, a.current);
+
+  // ① 추정치 리비전 히트맵
+  html += `<h3 class="h3">추정치 리비전 <span class="sub">최근 3개월 증권사가 추정치를 바꾼 폭 · 증권사별 가장 최근 변경의 최근 가중 평균 · ▲상향 ▼하향 곳 수 · 칸을 누르면 증권사별</span></h3>`;
+  html += annual.length ? fwHeat(annual) : `<div class="ai-note" style="margin:0">로그에 연간·선행 추정치 변경 기록이 없어요</div>`;
+  if (other.length) html += `<details class="more"><summary>분기·기간 미기재 리비전 ${other.length}개</summary><div class="rv-grid">${other.map(revisionBlock).join('')}</div></details>`;
+
+  // ② 목표가 근거: 연도 비율 막대 + 방식별 배수 요약, 증권사별 표는 접기
+  html += `<h3 class="h3">목표가는 어느 해를 보고 있나 <span class="sub">증권사 ${bs.length}곳 가장 최근 리포트의 산정 근거</span></h3>`;
   if (bs.length) {
-    const yc = {};
-    bs.forEach(b => { const k = b.year ? perName(b.year) + (b.year_src === '문맥' ? '(문맥)' : '') : '미기재'; yc[k] = (yc[k] || 0) + 1; });
-    html += `<div class="yr">${Object.entries(yc).sort().reverse().map(([k, n]) => `<span><b>${k}</b> ${n}곳</span>`).join('')}</div>`;
-    html += `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>증권사</th><th>기준</th><th>방식</th><th class="r">적용 배수</th><th class="r">기준값</th></tr></thead><tbody>
+    const yc = {}, meth = {}, COL = ['var(--ma20)', 'var(--ma10)', 'var(--ma5)', '#22a39f'];
+    bs.forEach(b => { const k = b.year ? perName(b.year) : '미기재'; yc[k] = (yc[k] || 0) + 1;
+      if (b.multiple != null && b.method) (meth[b.method] = meth[b.method] || []).push(b.multiple); });
+    const ys = Object.entries(yc).sort((x, y) => (x[0] === '미기재') - (y[0] === '미기재') || y[1] - x[1]);
+    html += `<div class="fw-yb">${ys.map(([k, n], i) => `<span style="flex:${n};background:${k === '미기재' ? 'var(--muted)' : COL[i % COL.length]}" title="${esc(k)} ${n}곳">${esc(k)} ${n}</span>`).join('')}</div>`;
+    const avgOf = v => v.reduce((s, x) => s + x, 0) / v.length;
+    html += `<div class="fw-meth">${Object.entries(meth).sort((x, y) => y[1].length - x[1].length).map(([m, v]) => `<span>${esc(m)} <b>${v.length > 1 ? `${fmtVal(Math.min(...v), '')}~${fmtVal(Math.max(...v), '배')}` : fmtVal(v[0], '배')}</b>${v.length > 1 ? ` · 평균 <b>${fmtVal(avgOf(v), '배')}</b>` : ''} · ${v.length}곳</span>`).join('')}</div>`;
+    const yearTxt = b => !b.year ? '-' : perName(b.year) + (b.year_src === '문맥' ? '<small class="muted">(문맥)</small>' : '');
+    html += `<details class="more"><summary>증권사별 산정 근거 ${bs.length}곳 보기</summary>
+      <p class="ep-sub">(문맥) = 줄에 연도가 없어 같은 증권사 리포트 문맥으로 판단, 마우스를 올리면 근거 구절</p>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>증권사</th><th>기준</th><th>방식</th><th class="r">적용 배수</th><th class="r">기준값</th></tr></thead><tbody>
       ${bs.map(b => `<tr><td>${chip(b.id, esc(b.broker))} <small class="muted">${b.date.slice(5, 10)}</small></td>
         <td${b.year_ctx ? ` title="문맥 근거: ${esc(b.year_ctx)}"` : ''}>${yearTxt(b)}</td><td>${esc(b.method || '-')}</td>
         <td class="r">${b.multiple != null ? fmtVal(b.multiple, '배') : '-'}</td>
         <td class="r">${b.base_value != null ? `${esc(b.base_item)} ${fmtVal(b.base_value, b.base_unit)}` : '-'}</td></tr>`).join('')}
-    </tbody></table></div>`;
+      </tbody></table></div>
+      ${a.current?.length ? `<div class="cm">${a.current.map(c => `<div><span class="k">현재가 기준 ${perName(c.period)} ${c.label}</span><b>${fmtVal(c.multiple, '배')}</b>
+        <span class="muted">${c.item} 가중 평균 ${fmt(c.base)}원 · ${c.n}개사</span></div>`).join('')}</div>` : ''}</details>`;
   } else html += `<div class="ai-note" style="margin:0">로그에 산정 근거가 적힌 리포트가 없어요</div>`;
-
-  // 현재가 기준 배수 vs 증권사 적용 배수
-  if (a.current?.length) {
-    const applied = (label, period) => {
-      const v = bs.filter(b => b.method === label && b.year === period && b.multiple != null).map(b => b.multiple);
-      return v.length ? `증권사 적용 ${label} 평균 <b>${fmtVal(v.reduce((s, x) => s + x, 0) / v.length, '배')}</b> (${v.length}곳)` : '';
-    };
-    html += `<div class="cm">${a.current.map(c => `<div>
-        <span class="k">현재가 기준 ${perName(c.period)} ${c.label}</span>
-        <b>${fmtVal(c.multiple, '배')}</b>
-        <span class="muted">${c.item} 가중 평균 ${fmt(c.base)}원 · ${c.n}개사</span>
-        <span>${applied(c.label, c.period)}</span></div>`).join('')}</div>`;
-  }
 
   // ③ 앞으로의 일정
   html += `<h3 class="h3">앞으로의 일정·동인 <span class="sub">로그에 적힌 미래 시점 언급, 시간순</span></h3>`;
-  html += (a.timeline || []).length ? `<ol class="tl">${a.timeline.map(t => `<li>
-      <span class="when">${esc(t.when || '시점 미기재')}</span>
-      <span class="ev">${esc(t.event)}</span>
-      <span class="src">${chip(t.id, esc(t.broker))}</span></li>`).join('')}</ol>`
+  // 같은 내용은 한 줄로(증권사 여러 곳이면 'A 외 n곳'), 시점 있는 것 8개 먼저, 나머지·시점 미기재는 접기
+  const tlm = new Map();
+  for (const x of a.timeline || []) {
+    const k = (x.when || '') + '|' + x.event.replace(/\s+/g, '');
+    if (!tlm.has(k)) tlm.set(k, {...x, more: []}); else if (!tlm.get(k).more.includes(x.broker) && tlm.get(k).broker !== x.broker) tlm.get(k).more.push(x.broker);
+  }
+  const tl = [...tlm.values()], dated = tl.filter(x => x.when), undated = tl.filter(x => !x.when);
+  const tli = x => `<li><span class="w">${esc(x.when || '시점 미기재')}</span><span class="e">${esc(x.event)}</span>
+      <span class="s">${chip(x.id, esc(x.broker))}${x.more.length ? `<small class="muted" title="${esc(x.more.join(', '))}"> 외 ${x.more.length}곳</small>` : ''}</span></li>`;
+  const rest = [...dated.slice(8), ...undated];
+  html += tl.length ? `<ul class="fw-tl">${dated.slice(0, 8).map(tli).join('')}</ul>${rest.length ? `<details class="more"><summary>${dated.length > 8 ? `일정 ${dated.length - 8}개 더` : ''}${dated.length > 8 && undated.length ? ' · ' : ''}${undated.length ? `시점 미기재 ${undated.length}개` : ''} 보기</summary><ul class="fw-tl">${rest.map(tli).join('')}</ul></details>` : ''}`
     : `<div class="ai-note" style="margin:0">로그에 미래 일정 언급이 없어요</div>`;
-
+  html += `<div class="ai-note">리비전 출처 — 원문 기존→변경 값 · 변화율/방향만: 원문에 절대값 없음 · ≈ 값은 원문 변화율 × 같은 증권사 직전 리포트 값으로 계산 · 줄에 마우스를 올리면 원문 구절</div>`;
   el.innerHTML = html;
 }
 
