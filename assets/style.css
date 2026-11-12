@@ -161,6 +161,25 @@ h2.sec .seg { margin-left: auto; }
 .stats b { font-size: 17px; }
 .stats span:not(.k) { font-size: 13px; }
 
+/* 투자 포인트 위쪽: 현재가·목표가·괴리 크게 + 목표가 0.8x·0.7x (11-12) */
+.cons-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; font-variant-numeric: tabular-nums; }
+.cons-hero > div { display: flex; flex-direction: column; gap: 2px; }
+.cons-hero .k { color: var(--muted); font-size: 12.5px; }
+.cons-hero .k small { font-size: 11px; }
+.cons-hero b { font-size: 26px; line-height: 1.2; letter-spacing: -.01em; }
+.cons-hero .gap b.pos { color: var(--up); } .cons-hero .gap b.neg { color: var(--down); }
+.cons-hero .mut, .cons-lv .mut { color: var(--muted); font-size: 12px; }
+.cons-lv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; font-variant-numeric: tabular-nums; }
+.cons-lv .lv { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.cons-lv .lv:first-child { border-color: var(--text-2); }
+.cons-lv .k { color: var(--text-2); font-size: 12.5px; font-weight: 700; }
+.cons-lv b { font-size: 17px; }
+.cons-lv .pos, .cons-lv .neg { font-size: 13px; font-weight: 600; }
+.cons-more { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cons-more b { color: var(--text-2); font-weight: 600; }
+.strip .lvl { position: absolute; top: 18px; height: 18px; border-left: 2px dotted var(--muted); }
+.strip .lvl em { top: 20px; color: var(--muted); font-size: 11.5px; }
+@media (max-width: 560px) { .cons-hero b { font-size: 22px; } .cons-lv { gap: 6px; } .cons-lv .lv { padding: 8px; } .cons-lv b { font-size: 15px; } }
 .strip { position: relative; height: 54px; margin: 22px 8px 0; }
 .strip .track { position: absolute; left: 0; right: 0; top: 26px; height: 2px; background: var(--line); border-radius: 1px; }
 .strip .dot { position: absolute; top: 21px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
