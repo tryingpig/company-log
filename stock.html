@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261113a">
+<link rel="stylesheet" href="assets/style.css?v=20261113b">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -548,16 +548,19 @@ function estPivot(tbl) {
   estCell = {};
   for (const r of tbl) { const k = r.item + '|' + r.period; if (!estCell[k] || r.n > estCell[k].n) estCell[k] = r; }
   const items = [...new Set(tbl.map(r => r.item))];
-  const pers = [...new Set(tbl.map(r => r.period))].sort((x, y) => estPer(x) - estPer(y));
+  const FWD = '12M Fwd';                                  // 선행 12개월은 기간 칸 대신 항목 아래 한 줄(칸 합침)
+  const pers = [...new Set(tbl.map(r => r.period))].filter(p => p !== FWD).sort((x, y) => estPer(x) - estPer(y));
   const unitOf = it => { const c = {}; pers.forEach(p => { const r = estCell[it + '|' + p]; if (r) c[r.unit] = (c[r.unit] || 0) + 1; });
     return Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0] || ''; };
-  const td = (it, p) => { const r = estCell[it + '|' + p];
+  const td = (it, p, span) => { const r = estCell[it + '|' + p];
     if (!r) return '<td class="na">·</td>';
+    if (span) return `<td class="ec wide" colspan="${span}" data-k="${esc(it + '|' + p)}"><b>${fmtVal(r.wmean ?? r.mean, '')}</b><small>${r.n}곳${r.min !== r.max ? ` · ${fmtVal(r.min, '')}~${fmtVal(r.max, '')}` : ''}${r.odd ? ` · ⚠${r.odd}` : ''}</small></td>`;
     if (r.mean == null) return `<td class="ec" data-k="${esc(it + '|' + p)}"><small class="odd-txt">단위 확인</small></td>`;
     return `<td class="ec" data-k="${esc(it + '|' + p)}"><b>${fmtVal(r.wmean ?? r.mean, '')}</b><small>${r.n}곳${r.min !== r.max ? ` · ${fmtVal(r.min, '')}~${fmtVal(r.max, '')}` : ''}${r.odd ? ` · ⚠${r.odd}` : ''}</small></td>`; };
   return `<div class="ep-wrap"><table class="ep"><thead><tr><th>항목</th>${pers.map(p => `<th>${esc(p)}</th>`).join('')}</tr></thead>
-    <tbody>${items.map(it => { const u = unitOf(it);
-      return `<tr><td>${esc(it)}${u ? ` <small>(${esc(u)})</small>` : ''}</td>${pers.map(p => td(it, p)).join('')}</tr>`; }).join('')}</tbody></table></div>`;
+    <tbody>${items.map(it => { const u = unitOf(it), f = estCell[it + '|' + FWD], has = pers.some(p => estCell[it + '|' + p]);
+      return (has ? `<tr><td>${esc(it)}${u ? ` <small>(${esc(u)})</small>` : ''}</td>${pers.map(p => td(it, p)).join('')}</tr>` : '')
+        + (f ? `<tr class="fwd"><td>${esc(it)} · 12M Fwd${f.unit ? ` <small>(${esc(f.unit)})</small>` : ''}</td>${td(it, FWD, pers.length || 1)}</tr>` : ''); }).join('')}</tbody></table></div>`;
 }
 function estToggle(c) {
   const box = c.closest('.ep-wrap'), tr = c.closest('tr'), old = box.querySelector('tr.ep-pop'), same = old && old.dataset.k === c.dataset.k;
@@ -565,7 +568,7 @@ function estToggle(c) {
   if (same) return;
   c.classList.add('on');
   const r = estCell[c.dataset.k];
-  tr.insertAdjacentHTML('afterend', `<tr class="ep-pop" data-k="${esc(c.dataset.k)}"><td colspan="${tr.children.length}"><div class="in">
+  tr.insertAdjacentHTML('afterend', `<tr class="ep-pop" data-k="${esc(c.dataset.k)}"><td colspan="${box.querySelectorAll('thead th').length}"><div class="in">
     <div class="ph"><span><b>${esc(r.item)} ${esc(r.period)}</b>${r.unit ? ` (${esc(r.unit)})` : ''} · 증권사 ${r.n}곳 · 최근 낸 순</span>
       ${r.mean != null ? `<span>가중 평균 <b>${fmtVal(r.wmean ?? r.mean, '')}</b> · 단순 ${fmtVal(r.mean, '')}</span>` : ''}</div>
     <div class="chips2">${r.brokers.map(b => `<a href="#r${b.id}" data-id="${b.id}"${b.odd ? ' class="odd" title="다른 값·실적 규모와 5배 이상 차이 — 원문 요약의 단위 표기를 확인하세요(평균에서 제외)"' : ' title="눌러서 이 리포트로 이동"'}>${b.odd ? '⚠ ' : ''}${esc(b.broker)} <b>${fmtVal(b.value, '')}</b> <i>${b.date.slice(5).replace('-', '.')}</i></a>`).join('')}</div></div></td></tr>`);

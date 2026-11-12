@@ -228,6 +228,9 @@ h2.sec .seg { margin-left: auto; }
 .ep td small { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
 .ep td.na { color: var(--line); }
 .ep td.ec { cursor: pointer; }
+.ep td.ec.wide { text-align: left; }
+.ep td.ec.wide b, .ep td.ec.wide small { display: inline; margin-right: 8px; }
+.ep tr.fwd > td:first-child { font-weight: 600; color: var(--text-2); }
 .ep td.ec small::after { content: " ▾"; }
 .ep td.ec:hover b { text-decoration: underline; }
 .ep td.ec.on { background: color-mix(in srgb, var(--ma20) 10%, transparent); box-shadow: inset 0 -2px 0 var(--ma20); }

@@ -417,14 +417,17 @@ def build_table(metrics, anchor=None):
     anchor = anchor or {}
     guess = _guess_unit(metrics, anchor)
     for m in metrics:
-        if not re.fullmatch(r"[1-4]Q\d{2}|20\d{2}", (m["period"] or "").strip()):
-            continue                                  # 비교표는 분기·연도만 (11-13 사용자: 2H26·12M Fwd·2026~2032 등 제외)
+        per_ = (m["period"] or "").strip()
+        if per_.upper() in ("12M FWD", "FORWARD"):
+            per_ = "12M Fwd"                          # 선행 12개월 — 목표가 근거라 남김(화면은 항목 옆에 붙여 한 칸)
+        elif not re.fullmatch(r"[1-4]Q\d{2}|20\d{2}", per_):
+            continue                                  # 그 밖엔 분기·연도만 (11-13 사용자: 2H26·2026~2032 등 제외)
         if m["item"].startswith("컨센서스"):
             continue                                  # 리포트가 옮겨 적은 시장 컨센서스는 증권사 추정치가 아님
         val, unit = (guess[id(m)], "억원") if id(m) in guess else _norm_unit(m["unit"], m["value"])
         if unit.strip().lower() in ("x", "배"):
             unit = "배"
-        key = (m["item"], m["period"], unit)
+        key = (m["item"], per_, unit)
         cur = groups.setdefault(key, {}).get(m["broker"])
         if not cur or m["id"] > cur["id"]:
             groups[key][m["broker"]] = dict(m, value=val)
