@@ -33,7 +33,7 @@ FIN = DATA / "fin"
 RAW = ROOT / "raw" / "company"
 BIZ_RAW = RAW / "biz"
 STATE = RAW / "state.json"
-SE_GAP = 1.5                 # 스탁이지 종목별 요청 간격(초)
+SE_GAP = 8                   # 스탁이지 종목별 요청 간격(초) — 11-12 1.5초 연속 조회 후 IP 6시간 차단
 FIN_STALE = 7                # 세션이 없을 때: 이 날수보다 오래된 것만 다시
 BIZ_RECHECK = 30             # 사업보고서 새로 나왔나 다시 볼 간격(일) — 3~4월은 매 실행
 BIZ_CHARS = 16000            # AI 에 넘길 「사업의 내용」 길이 (하위 장을 못 나눈 보고서는 앞부분)
@@ -286,7 +286,7 @@ def main():
     rc = 0
     try:
         if "--no-fin" not in sys.argv:
-            rc |= 2 if run_fin(state, codes, today, arg("--max-fin", 250)) else 0
+            rc |= 2 if run_fin(state, codes, today, arg("--max-fin", 50)) else 0
         if "--no-biz" not in sys.argv:
             rc |= 4 if run_biz(state, codes, today, arg("--max-biz", 80)) else 0
     finally:
