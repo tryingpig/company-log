@@ -411,23 +411,25 @@ def _guess_unit(metrics, anchor=None):
 
 
 def build_table(metrics, anchor=None):
-    """(항목, 기간, 단위)별로 증권사마다 가장 최근 값 비교표. 2개사 이상만. 금액은 억원으로 통일.
+    """(항목, 기간, 단위)별로 증권사마다 가장 최근 값 비교표. 1곳만 언급한 것도(11-13 사용자, 화면에 '1곳' 표시). 금액은 억원으로 통일.
     anchor(data/fin 실적·추정)가 있으면 단위 빠진 값의 자릿수와 '원문 단위 확인' 판정을 그 값 기준으로."""
     groups = {}
     anchor = anchor or {}
     guess = _guess_unit(metrics, anchor)
     for m in metrics:
-        if not m["period"]:
-            continue
+        if not re.fullmatch(r"[1-4]Q\d{2}|20\d{2}", (m["period"] or "").strip()):
+            continue                                  # 비교표는 분기·연도만 (11-13 사용자: 2H26·12M Fwd·2026~2032 등 제외)
+        if m["item"].startswith("컨센서스"):
+            continue                                  # 리포트가 옮겨 적은 시장 컨센서스는 증권사 추정치가 아님
         val, unit = (guess[id(m)], "억원") if id(m) in guess else _norm_unit(m["unit"], m["value"])
+        if unit.strip().lower() in ("x", "배"):
+            unit = "배"
         key = (m["item"], m["period"], unit)
         cur = groups.setdefault(key, {}).get(m["broker"])
         if not cur or m["id"] > cur["id"]:
             groups[key][m["broker"]] = dict(m, value=val)
     table = []
     for (item, period, unit), per in groups.items():
-        if len(per) < 2:
-            continue
         # 원문 요약 자체에 단위 오타가 있다(7,090억원을 "709.0억원"으로 적는 식). 값은 고치지 않고
         # 중앙값과 5배 이상 차이 나면 '원문 단위 확인' 표시 후 평균에서 뺀다. 2개사뿐이면 평균을 내지 않는다.
         vals = sorted(m["value"] for m in per.values())
@@ -453,6 +455,9 @@ def build_table(metrics, anchor=None):
                       "brokers": sorted(rows, key=lambda x: x["date"], reverse=True)})
     order = ["매출액", "영업이익", "지배순이익", "순이익", "EPS", "BPS", "ROE", "OPM",
              "적용 PER", "적용 PBR", "적용 EV/EBITDA"]
+    # 1곳만 언급한 칸은 주요 항목이거나 다른 기간에 2곳 이상 언급된 항목일 때만 (한 번 나온 잡항목이 표를 덮지 않게)
+    keep = {r["item"] for r in table if r["n"] >= 2} | set(order)
+    table = [r for r in table if r["item"] in keep]
     table.sort(key=lambda t: (order.index(t["item"]) if t["item"] in order else 99, t["item"], t["period"]))
     return table
 
