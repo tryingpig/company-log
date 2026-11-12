@@ -199,6 +199,17 @@ h2.sec .seg { margin-left: auto; }
 .bul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--text-2); }
 .bul li + li { margin-top: 3px; }
 .bul.num { color: var(--text); font-variant-numeric: tabular-nums; }
+.bul .hl, .vlist .hl { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.bul .ar, .vlist .ar { color: var(--muted); padding: 0 1px; }
+.bul.num li + li { margin-top: 5px; }
+.vlist { margin: 0; padding: 0; list-style: none; font-size: 14px; color: var(--text-2); }
+.vlist li { display: grid; grid-template-columns: 68px 1fr; gap: 10px; line-height: 1.6; }
+.vlist li + li { margin-top: 8px; }
+.vlab { font-size: 11.5px; font-weight: 700; text-align: center; padding: 2px 0; border-radius: 6px; height: fit-content; margin-top: 2px; white-space: nowrap; }
+.vlab.up { background: color-mix(in srgb, var(--up) 12%, transparent); color: var(--up); }
+.vlab.down, .vlab.risk { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
+.vlab.flow, .vlab.base, .vlab.split { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--text-2); }
+@media (max-width: 560px) { .vlist li { grid-template-columns: 60px 1fr; gap: 8px; } }
 .ai-note { margin-top: 16px; color: var(--muted); font-size: 12px; }
 .ai-badge { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; vertical-align: 2px;
   color: var(--text-2); background: var(--surface-2, transparent); border: 1px solid var(--line); }
