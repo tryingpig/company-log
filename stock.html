@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261112d">
+<link rel="stylesheet" href="assets/style.css?v=20261112e">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -721,10 +721,18 @@ function renderLog() {
   document.getElementById('log').innerHTML = rs.length ? rs.map(card).join('') : '<div class="panel empty">해당 리포트가 없어요</div>';
 }
 
-function focusCard(id) {
+// 카드로 이동할 때 읽던 위치를 기억 → '↩ 읽던 곳으로' 버튼 (사용자 요청 11-12). 여러 번 옮겨 다녀도 처음 자리
+let backY = null;
+function setBack(y) {
+  backY = y;
+  const b = document.getElementById('fabBack');
+  if (b) b.hidden = y == null;
+}
+function focusCard(id, keep = true) {
   if (dir !== 'all') document.querySelector('#dirSeg button[data-v="all"]').click();
   const el = document.getElementById('r' + id);
   if (!el) return;
+  if (keep && backY == null) setBack(window.scrollY);
   el.scrollIntoView({behavior: 'smooth', block: 'start'});
   el.classList.add('flash');
   setTimeout(() => el.classList.remove('flash'), 1600);
@@ -906,7 +914,7 @@ Promise.all([
       renderConsensus(); renderForward(); renderBrokers(); renderLog();
     }
     // 목록의 '최근 의견 전환'에서 들어오면 그 리포트로 이동
-    setTimeout(() => { const m = location.hash.match(/^#r(\d+)$/); if (m) focusCard(m[1]); }, 0);
+    setTimeout(() => { const m = location.hash.match(/^#r(\d+)$/); if (m) focusCard(m[1], false); }, 0);
   })
   .catch(() => { document.getElementById('name').textContent = '종목을 찾을 수 없어요'; });
 </script>
@@ -920,6 +928,7 @@ Promise.all([
     <a href="#secBrk">증권사별 의견</a>
     <a href="#secLog">리포트 로그</a>
   </div>
+  <button type="button" class="fab-btn fab-back" id="fabBack" hidden title="증권사를 누르기 전 읽던 자리로">↩ 읽던 곳으로</button>
   <button type="button" class="fab-btn" id="fabToggle" aria-expanded="false" aria-controls="fabMenu" title="섹션으로 이동">목차</button>
   <button type="button" class="fab-btn" id="fabTop" title="맨 위로" aria-label="맨 위로">↑</button>
 </nav>
@@ -947,6 +956,10 @@ Promise.all([
     close();
   });
   document.getElementById('fabTop').onclick = () => { window.scrollTo({top: 0, behavior: smooth}); close(); };
+  document.getElementById('fabBack').onclick = () => {
+    if (backY != null) window.scrollTo({top: backY, behavior: smooth});
+    setBack(null); close();
+  };
   document.addEventListener('click', e => { if (!e.target.closest('.fab')) close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   const fab = document.querySelector('.fab');
