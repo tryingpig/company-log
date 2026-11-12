@@ -38,6 +38,7 @@ from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, qu
 ROOT = Path(__file__).resolve().parent.parent
 STOCKS = ROOT / "data" / "stocks"
 OUT = ROOT / "data" / "analysis"
+WINDOW_DAYS = 92                     # build.py 와 같은 3개월 구간
 KST = timezone(timedelta(hours=9))
 
 MODEL = "claude-sonnet-5"            # 의견 정리(증권사별·통합)
@@ -734,6 +735,7 @@ async def summarize(a, d, sem):
     a["flip_seen"] = sorted(str(i) for i in flip_ids)          # 사유를 물어본 전환 (못 받아도 다시 묻지 않음)
     a["generated"] = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     a["needs_summary"] = False
+    a["sum_ids"] = sorted(r["id"] for r in d["win_reports"])   # 이 묶음으로 정리함 — 빠지거나 늘면 다시
     return set(r["broker"] for r in d["win_reports"]) - set(a["brokers"])
 
 
@@ -752,6 +754,16 @@ async def run_async(codes, force=False, deadline=None):
             - set(a.get("flips") or {}) - set(a.get("flip_seen") or [])
         if new_flips and a.get("generated"):
             a["needs_summary"] = True
+        # 3개월 밖으로 빠진 리포트가 있으면 의견 정리도 다시 (11-12 사용자: 옛 리포트 내용이 남지 않게)
+        win_ids = {r["id"] for r in d["win_reports"]}
+        if a.get("generated"):
+            if "sum_ids" not in a:                       # 기록 전 정리분: 정리 시점 3개월 안이던 리포트가 지금 빠졌나로 판단
+                cut = (datetime.strptime(a["generated"][:10], "%Y-%m-%d") - timedelta(days=WINDOW_DAYS)).strftime("%Y-%m-%d")
+                if any(not r.get("win") and cut <= r["date"][:10] <= a["generated"][:10] for r in d["reports"]):
+                    a["needs_summary"] = True
+                a["sum_ids"] = sorted(win_ids)
+            elif set(a["sum_ids"]) - win_ids:
+                a["needs_summary"] = True
         stocks[code] = (d, a)
         done = set(a["done"])
         by_b = {}

@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261112a">
+<link rel="stylesheet" href="assets/style.css?v=20261112d">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -95,7 +95,7 @@
   <h2 class="sec" id="relHead" hidden>시장 대비 성과 <span class="sub" id="relSub"></span></h2>
   <div class="panel pad" id="relperf" hidden></div>
 
-  <h2 class="sec" id="secCons">통합 정리 <span class="sub" id="consSub"></span></h2>
+  <h2 class="sec" id="secCons">투자 포인트 <span class="sub" id="consSub"></span></h2>
   <div class="panel pad" id="consensus"></div>
 
   <h2 class="sec" id="secFwd">앞을 보는 숫자 <span class="sub">27E·28E 추정치 변화 · 목표가 근거 · 앞으로의 일정</span></h2>
@@ -484,7 +484,7 @@ function updateLegend(p) {
   };
 }
 
-/* ── 통합 정리 ── */
+/* ── 투자 포인트 (옛 이름 통합 정리, 11-12 사용자) ── */
 function aiPendingNote() {
   const a = analysis;
   const win = data.reports.filter(r => r.win).length;
@@ -540,8 +540,8 @@ function renderConsensus() {
   const a = analysis;
   html += aiPendingNote();
   if (a) {
-    if (a.overall?.numbers?.length) html += `<h3 class="h3">핵심 숫자</h3>${bullets(a.overall.numbers, 'num')}`;
-    if (a.table?.length) html += `<h3 class="h3">증권사 추정치 비교 <span class="sub">증권사별 가장 최근 값 · 평균은 최근에 낸 값일수록 크게 반영 · 2개사 이상 언급 항목 · 금액은 억원 환산 · ⚠ 원문 단위 확인 필요(평균 제외)</span></h3>
+    if (a.overall?.numbers?.length) html += `<h3 class="h3">핵심 숫자 <span class="ai-badge">AI 요약</span></h3>${bullets(a.overall.numbers, 'num')}`;
+    if (a.table?.length) html += `<h3 class="h3">증권사 추정치 비교 <span class="ai-badge">AI 추출</span> <span class="sub">증권사별 가장 최근 값 · 평균은 최근에 낸 값일수록 크게 반영 · 2개사 이상 언급 항목 · 금액은 억원 환산 · ⚠ 원문 단위 확인 필요(평균 제외)</span></h3>
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>항목</th><th>기간</th><th class="r">평균 (최근 가중)</th><th class="r">범위</th><th>증권사별</th></tr></thead>
         <tbody>${a.table.map(t => `<tr>
@@ -550,9 +550,9 @@ function renderConsensus() {
           <td class="r">${t.mean == null ? '-' : t.min === t.max ? fmtVal(t.min, t.unit) : `${fmtVal(t.min, '')} ~ ${fmtVal(t.max, t.unit)}`}</td>
           <td class="chips">${t.brokers.map(b => `<a href="#r${b.id}" data-id="${b.id}"${b.odd ? ' class="odd" title="다른 증권사와 5배 이상 차이 — 원문 요약의 단위 표기를 확인하세요(평균에서 제외)"' : ''}>${b.odd ? '⚠ ' : ''}${esc(b.broker)} <b>${fmtVal(b.value, '')}</b></a>`).join('')}</td>
         </tr>`).join('')}</tbody></table></div>`;
-    if (a.overall?.view?.length) html += `<h3 class="h3">통합 의견</h3>${bullets(a.overall.view)}`;
+    if (a.overall?.view?.length) html += `<h3 class="h3">통합 의견 <span class="ai-badge">AI 요약</span></h3>${bullets(a.overall.view)}`;
     const cv = a.coverage;
-    html += `<div class="ai-note">숫자·의견 정리는 아래 리포트 로그 원문에서 AI가 추출 (${esc(a.generated)}). 숫자는 원문 구절과 대조해 확인된 것만 표시${cv ? `<br>처리 범위: 요약 ${cv.lines}줄(숫자 포함 ${cv.numeric}줄) 중 ${cv.lines - cv.missing.length}줄 처리 — 추출 ${cv.with_items}줄 · 해당 없음 ${cv.skipped}줄${cv.retried ? ` · 재질문 ${cv.retried}줄` : ''}${cv.missing.length ? ` · <b class="odd-txt">미처리 ${cv.missing.length}줄</b>` : ''}` : ''}</div>`;
+    html += `<div class="ai-note"><b>AI 요약 안내</b> · 핵심 숫자·증권사 추정치 비교·통합 의견은 아래 리포트 로그의 증권사 리포트 요약(최근 3개월)을 AI(Claude)가 정리한 것이에요. 리포트에 적힌 내용만 옮기게 했고, 투자 의견이 아니에요. 숫자는 원문 구절과 대조해 확인된 것만 표시해요. 새 리포트가 들어오거나 3개월이 지나 리포트가 빠지면 다시 정리해요 (정리 ${esc(a.generated)})${cv ? `<br>처리 범위: 요약 ${cv.lines}줄(숫자 포함 ${cv.numeric}줄) 중 ${cv.lines - cv.missing.length}줄 처리 — 추출 ${cv.with_items}줄 · 해당 없음 ${cv.skipped}줄${cv.retried ? ` · 재질문 ${cv.retried}줄` : ''}${cv.missing.length ? ` · <b class="odd-txt">미처리 ${cv.missing.length}줄</b>` : ''}` : ''}</div>`;
   } else {
     html += `<div class="ai-note">증권사 추정치·의견 AI 정리는 아직 준비 중이에요</div>`;
   }
@@ -767,8 +767,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   chart.remove(); drawChart();
 });
 
-// 기업 분석 (사용자 요청 11-12): ① 사업 내용(DART 사업보고서 AI 정리) ② 투자포인트(리포트 로그 3개월, 증권사별 최신 1건)
-// ③ 이익 성장률(스탁이지 실적·추정). 접고 펴기는 기기마다 기억
+// 기업 분석 (사용자 요청 11-12): ① 사업 내용(DART 사업보고서 AI 정리) ② 이익 성장률(DART 실적 + 와이즈리포트 추정)
+// ③ 밸류에이션(연도별 표). 투자포인트는 아래 '투자 포인트' 칸(AI 요약)과 겹쳐 뺌. 접고 펴기는 기기마다 기억
 function renderCompany(fin, biz) {
   const box = document.getElementById('secCa'), body = document.getElementById('caBody'), parts = [], html = [];
   if (biz && biz.rows && biz.rows.length) {
@@ -779,22 +779,11 @@ function renderCompany(fin, biz) {
       <tbody>${biz.rows.map(r => `<tr><td>${esc(r.biz)}</td><td>${esc(r.products)}</td><td>${esc(r.customers) || '<span class="mut">-</span>'}</td><td class="num">${esc(r.share) || '<span class="mut">-</span>'}</td></tr>`).join('')}</tbody></table></div>
       <p class="ca-src">${(biz.notes || []).map(esc).join(' · ')}${biz.notes && biz.notes.length ? ' · ' : ''}${biz.share_calc ? '* 매출 비중은 원문 부문별 매출 금액으로 계산 · ' : ''}${biz.share_gross ? '매출 비중은 부문 간 내부거래 제거 전이라 합이 100%를 넘음 · ' : ''}DART ${esc(biz.report_nm)} 「사업의 내용」을 AI가 정리 · 사업보고서가 새로 나오면 다시 정리</p>`);
   }
-  const seen = new Set(), ips = [];
-  for (const r of data.reports || []) if (r.win && !seen.has(r.broker)) { seen.add(r.broker); ips.push(r); }
-  if (ips.length) {
-    parts.push('투자포인트');
-    const li = (t, c) => t.split('\n').map(x => x.replace(/^\s*[-•]\s*/, '').trim()).filter(Boolean).map(x => `<li${c ? ` class="${c}"` : ''}>${esc(x)}</li>`).join('');
-    html.push(`<h3 class="ca-s">② 투자포인트 <span class="sub">최근 3개월 · 증권사별 최신 리포트 1건 · 최신순</span></h3><div class="ca-ip">${ips.map(r => {
-      const [pts, risk] = (r.summary || '').split(/🟥\s*리스크 요인/);
-      return `<div class="ip-row"><div class="ip-b"><b>${esc(r.broker)}</b><span class="tp">${r.date.slice(2, 10).replace(/-/g, '.')} · 목표가 ${fmt(+r.to)}원 ${r.dir === 'up' ? '▲' : '▼'}</span><span class="t">「${esc(r.title)}」</span></div>
-        <ul>${li(pts || '')}${risk ? li(risk, 'risk') : ''}</ul></div>`;
-    }).join('')}</div>`);
-  }
   const ys = fin && fin.years || [], act = ys.filter(y => !y.e), est = ys.filter(y => y.e);
   const show = [...act.slice(-4), ...est], prev = act.length > 4 ? act[act.length - 5] : null;
   if (show.length >= 2 && show.some(y => y.rev != null)) {
-    parts.push('이익 성장률');
-    html.push(`<h3 class="ca-s">③ 이익 성장률 <span class="sub">${fin.basis === 'S' ? '별도' : '연결'} · 억원${est.length ? ` · ${est[0].y}E~${est[est.length - 1].y}E는 증권사 추정 평균` : ''}</span></h3>
+    parts.push('이익 성장률', '밸류에이션');
+    html.push(`<h3 class="ca-s">② 이익 성장률 <span class="sub">${fin.basis === 'S' ? '별도' : '연결'} · 억원${est.length ? ` · ${est[0].y}E~${est[est.length - 1].y}E는 증권사 추정 평균` : ''}</span></h3>
       <div class="ca-charts">
         <figure class="ca-fig"><figcaption>매출액 <span class="mut">막대 아래 = 전년 대비</span></figcaption><div class="ca-c" data-k="rev"></div></figure>
         <figure class="ca-fig"><figcaption>영업이익 <span class="mut">흑전·적전·적지 = 흑자 전환·적자 전환·적자 지속</span></figcaption><div class="ca-c" data-k="op"></div></figure>
@@ -802,7 +791,9 @@ function renderCompany(fin, biz) {
           <div class="ca-lg"><span><i style="background:var(--ma10)"></i>매출총이익률</span><span><i style="background:var(--ma5)"></i>영업이익률</span></div>
           <div class="ca-c" data-k="mg"></div></figure>
       </div>
-      <p class="ca-src">실적: ${fin.act_src === 'DART' ? 'DART 사업보고서 재무제표 · 매출총이익 = 매출 − 매출원가, 이익률은 직접 계산' : esc(fin.act_src || '스탁이지')}${est.length ? ` · 추정: ${esc(fin.est_src || '스탁이지')}(${esc(fin.fetched)} 조회), 매출총이익률 추정치는 제공처가 없어 실적 연도까지만 · <span class="est-key"></span> 옅은 막대 = 추정` : fin.est_wait ? ' · 증권사 추정치는 순서대로 받는 중' : ' · 증권사 추정치 없음'}</p>`);
+      <h3 class="ca-s">③ 밸류에이션 <span class="sub">연도별 실적·추정 · EPS·PER·ROE</span></h3>
+      ${caTable(ys)}
+      <p class="ca-src">실적: ${fin.act_src === 'DART' ? 'DART 사업보고서 재무제표 · 매출총이익 = 매출 − 매출원가, 이익률은 직접 계산 · 순이익·EPS·PER·ROE는 와이즈리포트' : esc(fin.act_src || '와이즈리포트')}${est.length ? ` · 추정: ${esc(fin.est_src || '와이즈리포트')}(${esc(fin.fetched)} 조회), 매출총이익률 추정치는 제공처가 없어 실적 연도까지만 · <span class="est-key"></span> 옅은 막대 = 추정` : fin.est_wait ? ' · 증권사 추정치는 순서대로 받는 중' : ' · 증권사 추정치 없음'}</p>`);
   }
   if (!parts.length) return;
   document.getElementById('caSub').textContent = parts.join(' · ');
@@ -818,6 +809,26 @@ function renderCompany(fin, biz) {
     if (box.open) draw();
   });
   let rw; addEventListener('resize', () => { clearTimeout(rw); rw = setTimeout(() => { if (box.open) draw(); }, 200); });
+}
+// ③ 밸류에이션 연도별 표 (사용자 요청 11-12, 네이버 '추정실적 컨센서스' 모양). 매출총이익은 매출원가가 나온 실적 연도만
+function caTable(ys) {
+  if (!ys.length) return '';
+  const dash = '<span class="mut">-</span>';
+  const n0 = v => v == null ? dash : `<span${v < 0 ? ' class="neg"' : ''}>${Math.round(v).toLocaleString('ko-KR')}</span>`;
+  const n2 = v => v == null ? dash : `<span${v < 0 ? ' class="neg"' : ''}>${v.toFixed(2)}</span>`;
+  const amt = (v, p) => v == null ? dash : `${n0(v)}${p != null ? ` <span class="mut">(${p.toFixed(1)}%)</span>` : ''}`;
+  const body = ys.map((y, i) => {
+    const [yt, cls] = i ? caYoy(y.rev, ys[i - 1].rev) : ['', ''];
+    return `<tr${y.e ? ' class="est"' : ''}><td>${y.y}(${y.e ? 'E' : 'A'})</td><td class="num">${n0(y.rev)}</td>
+      <td class="num">${yt ? `<span class="${cls}">${yt}</span>` : dash}</td><td class="num">${amt(y.gp, y.gpm)}</td>
+      <td class="num">${amt(y.op, y.opm)}</td><td class="num">${n0(y.ni)}</td><td class="num">${n0(y.eps)}</td>
+      <td class="num">${y.per == null ? 'N/A' : n2(y.per)}</td><td class="num">${n2(y.roe)}</td></tr>`;
+  }).join('');
+  return `<div class="ca-tw ca-ft"><table class="ca-tbl"><thead><tr><th>재무연월</th><th class="num">매출액</th><th class="num">YoY</th>
+    <th class="num">매출총이익 <span class="mut">(GPM)</span></th><th class="num">영업이익 <span class="mut">(OPM)</span></th>
+    <th class="num">당기순이익</th><th class="num">EPS(원)</th><th class="num">PER(배)</th><th class="num">ROE(%)</th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+    <p class="ca-src">금액 억원 · (A) 실적, (E) 증권사 추정 평균 · 매출총이익은 매출원가가 공시된 실적 연도만</p>`;
 }
 function caYoy(cur, prv) {
   if (prv == null || cur == null) return ['', '', ''];
@@ -904,7 +915,7 @@ Promise.all([
     <a href="#secChart">차트</a>
     <a href="#secCa" data-opt>기업 분석</a>
     <a href="#relHead" data-opt>시장 대비 성과</a>
-    <a href="#secCons">통합 정리</a>
+    <a href="#secCons">투자 포인트</a>
     <a href="#secFwd">앞을 보는 숫자</a>
     <a href="#secBrk">증권사별 의견</a>
     <a href="#secLog">리포트 로그</a>

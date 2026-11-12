@@ -181,6 +181,8 @@ h2.sec .seg { margin-left: auto; }
 .bul li + li { margin-top: 3px; }
 .bul.num { color: var(--text); font-variant-numeric: tabular-nums; }
 .ai-note { margin-top: 16px; color: var(--muted); font-size: 12px; }
+.ai-badge { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; vertical-align: 2px;
+  color: var(--text-2); background: var(--surface-2, transparent); border: 1px solid var(--line); }
 
 .tbl-wrap { overflow-x: auto; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -660,16 +662,12 @@ a.edge-card:hover { border-color: var(--accent); }
 .ca-tbl td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .ca-tbl .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ca-tbl td:first-child { font-weight: 600; }
+.ca-ft { margin-top: 12px; }
+.ca-ft .ca-tbl td:first-child { white-space: nowrap; }
+.ca-ft .ca-tbl th.num { text-align: right; }
+.ca-ft .ca-tbl tr.est td { background: color-mix(in srgb, var(--ma20) 8%, transparent); }
+.ca-ft .ca-tbl .mut { font-weight: 400; }
 .ca-src { color: var(--muted); font-size: 11.5px; margin: 8px 0 2px; }
-.ca-ip { display: grid; gap: 8px; }
-.ip-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-.ip-b { font-size: 13px; }
-.ip-b b { display: block; font-size: 14px; }
-.ip-b .tp { font-variant-numeric: tabular-nums; }
-.ip-b .t { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
-.ip-row ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.55; }
-.ip-row li.risk { color: var(--muted); list-style: none; margin-left: -16px; margin-top: 4px; }
-.ip-row li.risk::before { content: '리스크 · '; color: var(--down); font-weight: 600; }
 .ca-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ca-fig { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 10px 4px; min-width: 0; }
 .ca-fig.wide { grid-column: 1 / -1; }
@@ -686,8 +684,6 @@ a.edge-card:hover { border-color: var(--accent); }
   .ca { padding: 0 12px; }
   .ca[open] { padding-bottom: 12px; }
   .ca-charts { grid-template-columns: 1fr; }
-  .ip-row { grid-template-columns: 1fr; gap: 6px; }
-  .ip-b b { display: inline; margin-right: 6px; }
   .ca-tbl { font-size: 12.5px; }
   .ca-tbl th, .ca-tbl td { padding: 7px 5px; }
 }

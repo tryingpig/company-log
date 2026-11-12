@@ -1,11 +1,9 @@
 """기업 분석 자료 — 종목 페이지 「기업 분석」 칸 (사용자 요청 2026-11-12).
 
   ③ 이익 성장률: 실적 5년 = DART 사업보고서 재무제표(screen 캐시 공용, 매출총이익·이익률은 계산)
-                 + 추정 3년 = 스탁이지 → data/fin/{code}.json (사용자 11-12: 실적은 원천, 스탁이지는 추정만)
-     · 매일 스탁이지 전 종목 PER(/valuation/data, 요청 1번)을 받아 주가÷PER 로 추정 EPS 를 되짚고,
-       추정이 있는 종목 중 처음이거나 추정 EPS 가 바뀐 종목만 종목별로 받는다(사용자: 그쪽 부담 줄이기).
-       추정이 없는 종목은 스탁이지를 아예 안 부른다.
-     · 로그인 세션이 끊기면 PER 비교를 못 하므로 7일 지난 것만 다시 받는다(종목별 주소는 로그인 없이 열림).
+                 + 추정 3년 = 와이즈리포트(네이버증권 종목분석 표) → data/fin/{code}.json
+     · 사용자 11-12: 실적은 원천, 추정만 외부. 스탁이지는 10여 건 연속 조회에 끊겨 와이즈리포트로 바꿈
+       (robots 는 Disallow 지만 네이버 화면 그대로의 표라 사용자가 허용). 처음·실적 발표 뒤·7일 지난 종목만 다시.
   ① 사업 내용: DART 최근 사업보고서 「II. 사업의 내용」 원문을 raw/company/biz/{code}.txt 로 받아 둔다.
      AI 정리는 daily.py(Python312)가 bizsum 으로 한다. 사업보고서가 새로 나왔을 때만 다시.
 
@@ -33,10 +31,13 @@ ROOT, DATA, KST = build.ROOT, build.DATA, build.KST
 FIN = DATA / "fin"
 RAW = ROOT / "raw" / "company"
 BIZ_RAW = RAW / "biz"
-SE_RAW = RAW / "se"           # 스탁이지 info-tab 정리본(실적·추정) — 추정치만 화면에 씀
+WR_RAW = RAW / "wr"           # 와이즈리포트 연간 요약표 정리본(실적·추정) — 추정치만 화면에 씀
+WR = "https://navercomp.wisereport.co.kr/v3/company/"   # 네이버증권 종목분석 화면에 끼워진 표
+WR_ROWS = ("매출액", "영업수익", "영업이익", "영업이익(발표기준)", "당기순이익", "EPS(원)", "PER(배)", "ROE(%)")
+WR_EXTRA = {"ni": "당기순이익", "eps": "EPS(원)", "per": "PER(배)", "roe": "ROE(%)"}   # 표에만 쓰는 칸
 STATE = RAW / "state.json"
-SE_GAP = 8                   # 스탁이지 종목별 요청 간격(초) — 11-12 1.5초 연속 조회 후 IP 6시간 차단
-FIN_STALE = 7                # 세션이 없을 때: 이 날수보다 오래된 것만 다시
+WR_GAP = 3                   # 와이즈리포트 종목 간격(초, 종목당 요청 2번)
+WR_STALE = 7                 # 추정치 다시 받는 주기(일) — 실적 발표가 지나면 바로
 BIZ_RECHECK = 30             # 사업보고서 새로 나왔나 다시 볼 간격(일) — 3~4월은 매 실행
 BIZ_CHARS = 16000            # AI 에 넘길 「사업의 내용」 길이 (하위 장을 못 나눈 보고서는 앞부분)
 BIZ_PARTS = [(r"개요", 5000), (r"주요\s*제품|영업의\s*(현황|종류)", 5000), (r"매출", 6000)]   # 하위 장별 최대 글자
@@ -51,50 +52,13 @@ def targets():
     return sorted(codes)
 
 
-# ── ③ 실적(DART)·추정(스탁이지) ─────────────────────────────────────────────
-# 사용자 원칙(11-12): 실적은 원천 DART + 계산(매출총이익 = 매출 − 매출원가, 이익률), 스탁이지는 추정치에만.
-
-def implied_eps(v):
-    """/valuation/data 한 종목 → {연도: 주가÷PER}. PER 이 비거나 0 이면 뺀다."""
-    out, px = {}, v.get("price")
-    for k, x in v.items():
-        m = re.fullmatch(r"(\d{4})\(E\)_PER", k)
-        if m and px and isinstance(x, (int, float)) and x:
-            out[m.group(1)] = round(px / x, 2)
-    return out
-
-
-def eps_changed(old, new):
-    if not old:
-        return True
-    for y, e in new.items():
-        o = old.get(y)
-        if o is None or abs(e - o) > max(abs(o) * 0.003, 0.5):      # 주가·PER 반올림 흔들림은 무시
-            return True
-    return False
-
+# ── ③ 실적(DART)·추정(와이즈리포트) ─────────────────────────────────────────
+# 사용자 원칙(11-12): 실적은 원천 DART + 계산(매출총이익 = 매출 − 매출원가, 이익률), 추정치만 와이즈리포트.
 
 def row(y, e, rev, op, gp):
     """금액 억원 → 화면 한 해. 이익률은 직접 계산."""
     pct = lambda a: None if a is None or not rev else round(a / rev * 100, 1)   # noqa: E731
     return {"y": str(y), "e": e, "rev": rev, "op": op, "gp": gp, "gpm": pct(gp), "opm": pct(op)}
-
-
-def parse_se(fin):
-    """스탁이지 info-tab financials → 연결(없으면 별도) {basis, act: 실적 행, est: 추정 3년 행}. 억원."""
-    for cs, a_key, e_key in (("C", "consolidatedYearly", "consolidatedYearlyEstimate"),
-                             ("S", "separateYearly", "separateYearlyEstimate")):
-        act = sorted((x for x in fin.get(a_key) or [] if x.get("revenue") is not None), key=lambda x: x["year"])
-        if act:
-            break
-    else:
-        return None
-    est = sorted((x for x in fin.get(e_key) or [] if x["year"] > act[-1]["year"] and x.get("revenue") is not None),
-                 key=lambda x: x["year"])[:3]
-    eok = lambda v: None if v is None else round(v / 1e8, 1)   # noqa: E731
-    conv = lambda x, e: row(x["year"], e, eok(x.get("revenue")), eok(x.get("operating_income")),   # noqa: E731
-                            eok(x.get("gross_profit")))
-    return {"basis": cs, "act": [conv(x, False) for x in act[-5:]], "est": [conv(x, True) for x in est]}
 
 
 def annual_year(st, today):
@@ -134,93 +98,131 @@ def dart_act(corp, y0):
 
 
 def build_fin(c, corp, st, today):
-    """data/fin/{c}.json = DART 실적 + 스탁이지 추정(받아 둔 것). 둘 다 없으면 파일 없음."""
-    se = json.loads((SE_RAW / f"{c}.json").read_text(encoding="utf-8")) if (SE_RAW / f"{c}.json").exists() else None
+    """data/fin/{c}.json = DART 실적 + 와이즈리포트 추정(받아 둔 것). 둘 다 없으면 파일 없음."""
+    se = json.loads((WR_RAW / f"{c}.json").read_text(encoding="utf-8")) if (WR_RAW / f"{c}.json").exists() else None
     act = dart_act(corp, annual_year(st, today)) if corp else None
     src = "DART"
     if not act and se and se["act"]:
-        act, src = se["act"], "스탁이지"                 # DART 재무제표가 없는 종목(금융사 일부 등)만
+        act, src = se["act"], "와이즈리포트"             # DART 재무제표에서 매출을 못 읽는 종목(금융사 등)만
     if not act:
         (FIN / f"{c}.json").unlink(missing_ok=True)
         return False
+    if src == "DART":                                    # 순이익·EPS·PER·ROE 는 실적 연도도 와이즈리포트 값
+        wa = {x["y"]: x for x in (se or {}).get("act") or []}
+        act = [{**x, **{k: (wa.get(x["y"]) or {}).get(k) for k in WR_EXTRA}} for x in act]
     last = int(act[-1]["y"])
     est = [x for x in (se or {}).get("est") or [] if int(x["y"]) > last]
     FIN.mkdir(parents=True, exist_ok=True)
     (FIN / f"{c}.json").write_text(json.dumps({
-        "code": c, "act_src": src, "est_src": "스탁이지" if est else None,
+        "code": c, "act_src": src, "est_src": "와이즈리포트" if est else None,
         "fetched": (se or {}).get("fetched") if est else None, "basis": (se or {}).get("basis", "C"),
-        **({"est_wait": True} if not est and st.get("has_est") else {}), "years": act + est}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        **({"est_wait": True} if se is None else {}), "years": act + est}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return True
 
 
-def run_se(state, codes, today, max_n):
-    """스탁이지 추정치: 추정 PER 이 있는 종목 중 처음이거나 추정 EPS 가 바뀐 것만 종목별로."""
-    s = earnings.session()
+def parse_wr(html):
+    """와이즈리포트 Financial Summary(연간) 표 → {basis, act: 실적 행, est: 추정 행}. 금액 억원 그대로."""
+    cell = lambda s: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s).replace("&nbsp;", " ")).strip()   # noqa: E731
+    ys, basis, data = None, "C", {}
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I):
+        cs = [cell(c) for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", tr, re.S | re.I)]
+        if ys is None:
+            m = [re.match(r"(\d{4})/\d{2}\s*(\(E\))?", c) for c in cs]
+            if sum(1 for x in m if x) >= 3:
+                ys = [(x.group(1), bool(x.group(2))) for x in m if x]
+                basis = "S" if any("별도" in c for c in cs) else "C"
+        elif cs and cs[0] in WR_ROWS:
+            data[cs[0]] = cs[-len(ys):]
+    if not ys:
+        return None
+    val = lambda k, i: num_wr((data.get(k) or [""] * len(ys))[i])   # noqa: E731
+    act, est = [], []
+    for i, (y, e) in enumerate(ys):
+        rev = val("매출액", i) if val("매출액", i) is not None else val("영업수익", i)
+        op = val("영업이익", i) if val("영업이익", i) is not None else val("영업이익(발표기준)", i)
+        if rev is not None:
+            r = row(y, e, rev, op, None)                 # 와이즈리포트엔 매출총이익 없음
+            r.update({k: val(n, i) for k, n in WR_EXTRA.items()})
+            (est if e else act).append(r)
+    return {"basis": basis, "act": act, "est": est[:3]}
+
+
+def num_wr(s):
+    s = (s or "").replace(",", "").strip()
     try:
-        val = ((earnings.get(s, "/stockdata/api/v1/valuation/data") or {}).get("data") or {}).get("data") or {}
-    except PermissionError:
-        val = None
-        print("스탁이지 세션 만료 — 추정 EPS 비교 없이 받아 둔 지 오래된 것만 다시 받음")
-    except requests.ConnectionError:
-        print("스탁이지 접속 안 됨 — 추정치는 다음 실행에", flush=True)
-        return 1
-    stale = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=FIN_STALE)).strftime("%Y-%m-%d")
+        return float(s)
+    except ValueError:
+        return None
+
+
+def fetch_wr(s, code):
+    page = WR + f"c1010001.aspx?cmp_cd={code}"
+    h = s.get(page, timeout=20)
+    h.raise_for_status()
+    enc, idv = re.search(r"encparam: '([^']+)'", h.text), re.search(r"id: '([^']*)'", h.text)
+    if not enc:
+        return None                                      # 와이즈리포트에 없는 종목(스팩·리츠 일부 등)
+    time.sleep(1)
+    r = s.get(WR + "ajax/cF1001.aspx", timeout=20, headers={"Referer": page, "X-Requested-With": "XMLHttpRequest"},
+              params={"cmp_cd": code, "fin_typ": 0, "freq_typ": "Y", "extY": 0, "extQ": 0,
+                      "encparam": enc.group(1), "id": idv.group(1) if idv else ""})
+    r.raise_for_status()
+    return parse_wr(r.text)
+
+
+def run_wr(state, codes, today, max_n):
+    """추정치(와이즈리포트): 처음·실적 발표 뒤·7일 지난 종목만. 실패·무응답이면 다음 실행에."""
+    rd = {}                                              # 실적 발표가 지난 종목: 발표일이 마지막 수집일 뒤
+    try:
+        for it in json.loads(earnings.OUT.read_text(encoding="utf-8")).get("items", []):
+            if it.get("record_date", "9999") <= today:
+                rd[it["symbol"]] = max(rd.get(it["symbol"], ""), it["record_date"])
+    except Exception:
+        pass
+    stale = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=WR_STALE)).strftime("%Y-%m-%d")
     todo, why = [], {}
     for c in codes:
-        st = state.setdefault(c, {})
-        got = st.get("se")
-        if val is not None:
-            eps = implied_eps(val.get(c) or {})
-            st["has_est"] = bool(eps)                    # 화면: '추정 없음'과 '아직 못 받음' 구분
-            if not eps:
-                continue                                 # 증권사 추정이 없는 종목 — 실적은 DART 만으로
-            if not got:
-                why[c] = "new"
-            elif eps_changed(st.get("eps"), eps):
-                why[c] = "추정치 변경"
-        elif got and got < stale:
+        got = state.setdefault(c, {}).get("wr")
+        if not got:
+            why[c] = "new"
+        elif rd.get(c, "") > got:
+            why[c] = "실적 발표"
+        elif got < stale:
             why[c] = "오래됨"
         if c in why:
             todo.append(c)
-    order = {"추정치 변경": 0, "오래됨": 1, "new": 2}
-    todo.sort(key=lambda c: order[why[c]])
-    SE_RAW.mkdir(parents=True, exist_ok=True)
+    order = {"실적 발표": 0, "new": 1, "오래됨": 2}
+    todo.sort(key=lambda c: (order[why[c]], state[c].get("wr", "")))
+    WR_RAW.mkdir(parents=True, exist_ok=True)
+    s = requests.Session()
+    s.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/150.0", "Referer": "https://stock.naver.com/"})
     done = fail = streak = 0
     for c in todo[:max_n]:
         try:
-            j = earnings.get(s, f"/stockdata/api/v1/stock-info/info-tab/{c}")
-            f = parse_se((j or {}).get("financials") or {})
+            f = fetch_wr(s, c)
             streak = 0
-        except PermissionError:
-            f = None                                     # info-tab 은 로그인 없이도 열림 — 만료로 막히면 다음에
         except Exception as e:
             print(f"  {c} 추정치 수집 실패: {type(e).__name__}", flush=True)
-            f, fail = None, fail + 1
+            f, fail = False, fail + 1
             streak += isinstance(e, requests.ConnectionError)
-            if streak >= 3:                              # 서버 무응답 — 종목마다 90초씩 기다리지 말고 다음 실행에
-                print("스탁이지 접속 안 됨 — 추정치 수집 중단, 다음 실행이 이어 받음", flush=True)
+            if streak >= 3:                              # 서버 무응답 — 다음 실행에
+                print("와이즈리포트 접속 안 됨 — 추정치 수집 중단, 다음 실행이 이어 받음", flush=True)
                 break
-        if f:
-            (SE_RAW / f"{c}.json").write_text(json.dumps({"fetched": today, **f}, ensure_ascii=False), encoding="utf-8")
+        if f is not False:
+            (WR_RAW / f"{c}.json").write_text(json.dumps({"fetched": today, **(f or {"act": [], "est": []})},
+                                                         ensure_ascii=False), encoding="utf-8")
+            state[c]["wr"] = today                       # 받은 종목만 — 실패한 종목은 다음 실행이 다시
             done += 1
-            st = state[c]
-            st["se"] = today                             # 받은 종목만 — 실패한 종목은 다음 실행이 다시
-            if val and c in val:
-                st["eps"] = implied_eps(val[c])
-        time.sleep(SE_GAP)
-    if val:                                              # 안 받은 종목도 오늘 EPS 를 기준으로 (다음 비교용) — 받은 적 있는 것만
-        for c in codes:
-            if c in val and state[c].get("se") and c not in todo:
-                state[c]["eps"] = implied_eps(val[c])
+        time.sleep(WR_GAP)
     cnt = {k: sum(1 for c in todo if why[c] == k) for k in order}
-    print(f"추정치(스탁이지): 다시 받을 {len(todo)} ({', '.join(f'{k} {v}' for k, v in cnt.items() if v)})"
+    print(f"추정치(와이즈리포트): 다시 받을 {len(todo)} ({', '.join(f'{k} {v}' for k, v in cnt.items() if v)})"
           f" · 이번에 {done} 받음" + (f" · 실패 {fail}" if fail else "") + (f" · 남은 {len(todo) - max_n}" if len(todo) > max_n else ""))
     return fail
 
 
 def run_fin(state, codes, today, max_n):
-    """추정치(스탁이지, 바뀐 것만) → 전 종목 data/fin 다시 만들기(DART 실적은 캐시, 없는 것만 새로)."""
-    rc = run_se(state, codes, today, max_n)
+    """추정치(와이즈리포트) → 전 종목 data/fin 다시 만들기(DART 실적은 캐시, 없는 것만 새로)."""
+    rc = run_wr(state, codes, today, max_n)
     corps = json.loads(build.CORPS.read_text(encoding="utf-8"))
     n = 0
     for c in codes:
@@ -352,7 +354,7 @@ def main():
     rc = 0
     try:
         if "--no-fin" not in sys.argv:
-            rc |= 2 if run_fin(state, codes, today, arg("--max-fin", 10)) else 0
+            rc |= 2 if run_fin(state, codes, today, arg("--max-fin", 120)) else 0
         if "--no-biz" not in sys.argv:
             rc |= 4 if run_biz(state, codes, today, arg("--max-biz", 80)) else 0
     finally:
