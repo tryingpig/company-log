@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261111h">
+<link rel="stylesheet" href="assets/style.css?v=20261112a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -86,6 +86,11 @@
       </details>
     </div>
   </div>
+
+  <details class="ca" id="secCa" hidden>
+    <summary><span class="ca-t">기업 분석</span><span class="sub" id="caSub"></span></summary>
+    <div id="caBody"></div>
+  </details>
 
   <h2 class="sec" id="relHead" hidden>시장 대비 성과 <span class="sub" id="relSub"></span></h2>
   <div class="panel pad" id="relperf" hidden></div>
@@ -762,6 +767,109 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   chart.remove(); drawChart();
 });
 
+// 기업 분석 (사용자 요청 11-12): ① 사업 내용(DART 사업보고서 AI 정리) ② 투자포인트(리포트 로그 3개월, 증권사별 최신 1건)
+// ③ 이익 성장률(스탁이지 실적·추정). 접고 펴기는 기기마다 기억
+function renderCompany(fin, biz) {
+  const box = document.getElementById('secCa'), body = document.getElementById('caBody'), parts = [], html = [];
+  if (biz && biz.rows && biz.rows.length) {
+    parts.push('사업 내용');
+    html.push(`<h3 class="ca-s">① 사업 내용</h3>
+      <p class="ca-line">${esc(biz.line)}</p>
+      <div class="ca-tw"><table class="ca-tbl"><thead><tr><th>사업</th><th>주요 제품·역할</th><th>주요 수요처</th><th class="num">매출 비중</th></tr></thead>
+      <tbody>${biz.rows.map(r => `<tr><td>${esc(r.biz)}</td><td>${esc(r.products)}</td><td>${esc(r.customers) || '<span class="mut">-</span>'}</td><td class="num">${esc(r.share) || '<span class="mut">-</span>'}</td></tr>`).join('')}</tbody></table></div>
+      <p class="ca-src">${(biz.notes || []).map(esc).join(' · ')}${biz.notes && biz.notes.length ? ' · ' : ''}DART ${esc(biz.report_nm)} 「사업의 내용」을 AI가 정리 · 사업보고서가 새로 나오면 다시 정리</p>`);
+  }
+  const seen = new Set(), ips = [];
+  for (const r of data.reports || []) if (r.win && !seen.has(r.broker)) { seen.add(r.broker); ips.push(r); }
+  if (ips.length) {
+    parts.push('투자포인트');
+    const li = (t, c) => t.split('\n').map(x => x.replace(/^\s*[-•]\s*/, '').trim()).filter(Boolean).map(x => `<li${c ? ` class="${c}"` : ''}>${esc(x)}</li>`).join('');
+    html.push(`<h3 class="ca-s">② 투자포인트 <span class="sub">최근 3개월 · 증권사별 최신 리포트 1건 · 최신순</span></h3><div class="ca-ip">${ips.map(r => {
+      const [pts, risk] = (r.summary || '').split(/🟥\s*리스크 요인/);
+      return `<div class="ip-row"><div class="ip-b"><b>${esc(r.broker)}</b><span class="tp">${r.date.slice(2, 10).replace(/-/g, '.')} · 목표가 ${fmt(+r.to)}원 ${r.dir === 'up' ? '▲' : '▼'}</span><span class="t">「${esc(r.title)}」</span></div>
+        <ul>${li(pts || '')}${risk ? li(risk, 'risk') : ''}</ul></div>`;
+    }).join('')}</div>`);
+  }
+  const ys = fin && fin.years || [], act = ys.filter(y => !y.e), est = ys.filter(y => y.e);
+  const show = [...act.slice(-4), ...est], prev = act.length > 4 ? act[act.length - 5] : null;
+  if (show.length >= 2 && show.some(y => y.rev != null)) {
+    parts.push('이익 성장률');
+    html.push(`<h3 class="ca-s">③ 이익 성장률 <span class="sub">${fin.basis === 'S' ? '별도' : '연결'} · 억원${est.length ? ` · ${est[0].y}E~${est[est.length - 1].y}E는 증권사 추정 평균` : ''}</span></h3>
+      <div class="ca-charts">
+        <figure class="ca-fig"><figcaption>매출액 <span class="mut">막대 아래 = 전년 대비</span></figcaption><div class="ca-c" data-k="rev"></div></figure>
+        <figure class="ca-fig"><figcaption>영업이익 <span class="mut">흑전·적전·적지 = 흑자 전환·적자 전환·적자 지속</span></figcaption><div class="ca-c" data-k="op"></div></figure>
+        <figure class="ca-fig wide"><figcaption>매출총이익률 · 영업이익률 <span class="mut">실선 실적 · 점선 추정</span></figcaption>
+          <div class="ca-lg"><span><i style="background:var(--ma10)"></i>매출총이익률</span><span><i style="background:var(--ma5)"></i>영업이익률</span></div>
+          <div class="ca-c" data-k="mg"></div></figure>
+      </div>
+      <p class="ca-src">실적·추정: 스탁이지(${esc(fin.fetched)} 조회) · 매출총이익률 추정치는 제공처가 없어 실적 연도까지만 · <span class="est-key"></span> 옅은 막대 = 추정</p>`);
+  }
+  if (!parts.length) return;
+  document.getElementById('caSub').textContent = parts.join(' · ');
+  body.innerHTML = html.join('');
+  box.hidden = false;
+  const draw = () => body.querySelectorAll('.ca-c').forEach(el => caChart(el, el.dataset.k, show, prev));
+  let open0 = false;
+  try { open0 = localStorage.getItem('cl-ca-open') === '1'; } catch (e) {}
+  box.open = open0;
+  if (box.open) draw();
+  box.addEventListener('toggle', () => {
+    try { localStorage.setItem('cl-ca-open', box.open ? '1' : '0'); } catch (e) {}
+    if (box.open) draw();
+  });
+  let rw; addEventListener('resize', () => { clearTimeout(rw); rw = setTimeout(() => { if (box.open) draw(); }, 200); });
+}
+function caYoy(cur, prv) {
+  if (prv == null || cur == null) return ['', '', ''];
+  if (prv < 0 && cur < 0) return ['적자 지속', 'neg', '적지'];
+  if (prv < 0) return ['흑자 전환', 'pos', '흑전'];
+  if (cur < 0) return ['적자 전환', 'neg', '적전'];
+  if (!prv) return ['', '', ''];
+  const p = (cur / prv - 1) * 100;
+  return [(p > 0 ? '+' : '') + p.toFixed(1) + '%', p > 0 ? 'pos' : p < 0 ? 'neg' : ''];
+}
+function caChart(el, k, ys, prev) {
+  const W = Math.max(280, el.clientWidth), n = ys.length, lab = y => `'${y.y.slice(2)}${y.e ? 'E' : ''}`;
+  const f0 = v => Math.round(v).toLocaleString('ko-KR');
+  let s = '', H;
+  if (k === 'rev' || k === 'op') {
+    H = 200; const T = 22, B = 48, bw = W / n, vals = ys.map(y => y[k]);
+    const ok = vals.filter(v => v != null), hi = Math.max(0, ...ok), lo = Math.min(0, ...ok), sp = hi - lo || 1;
+    const Y = v => T + (hi - v) / sp * (H - T - B), y0 = Y(0);
+    s = `<line x1="0" x2="${W}" y1="${y0}" y2="${y0}" stroke="var(--line)"/>`;
+    ys.forEach((y, i) => {
+      const v = y[k], x = i * bw + bw * .2, w = bw * .6, cx = x + w / 2;
+      const [yt, cls, ab] = caYoy(v, i ? ys[i - 1][k] : prev && prev[k]);
+      s += `<text class="ax" x="${cx}" y="${H - 18}" text-anchor="middle">${lab(y)}</text>
+        <text class="${cls}" x="${cx}" y="${H - 4}" text-anchor="middle">${ab || yt}</text>`;
+      if (v == null) return;
+      const top = Math.min(Y(v), y0), h = Math.max(1, Math.abs(Y(v) - y0));
+      s += `<g><title>${y.y}${y.e ? 'E' : ''} ${f0(v)}억${yt ? ' · 전년 대비 ' + yt : ''}</title>
+        <rect x="${x}" y="${top}" width="${w}" height="${h}" rx="3" fill="var(--ma20)" fill-opacity="${y.e ? .28 : 1}"${y.e ? ' stroke="var(--ma20)" stroke-dasharray="3 2"' : ''}/>
+        <text class="v" x="${cx}" y="${v >= 0 ? top - 5 : top + h + 12}" text-anchor="middle">${f0(v)}</text></g>`;
+    });
+  } else {
+    H = 200; const T = 18, B = 30, L = 36, all = ys.flatMap(y => [y.gpm, y.opm]).filter(v => v != null);
+    if (!all.length) { el.innerHTML = '<p class="mut">이익률 자료 없음</p>'; return; }
+    const st = (Math.max(...all) - Math.min(0, ...all)) > 60 ? 20 : 10;
+    const hi = Math.ceil(Math.max(0, ...all) / st) * st, lo = Math.floor(Math.min(0, ...all) / st) * st;
+    const X = i => L + (i + .5) * (W - L) / n, Y = v => T + (hi - v) / (hi - lo || 1) * (H - T - B);
+    for (let g = lo; g <= hi; g += st) s += `<line x1="${L}" x2="${W}" y1="${Y(g)}" y2="${Y(g)}" stroke="var(--line)" stroke-width="${g === 0 ? 1.2 : .6}"/><text class="ax" x="${L - 6}" y="${Y(g) + 4}" text-anchor="end">${g}%</text>`;
+    ys.forEach((y, i) => { s += `<text class="ax" x="${X(i)}" y="${H - 4}" text-anchor="middle">${W < 500 ? lab(y) : y.y + (y.e ? 'E' : '')}</text>`; });
+    const lastA = ys.map(y => !y.e).lastIndexOf(true);
+    for (const [key, col, nm, up] of [['gpm', '--ma10', '매출총이익률', -1], ['opm', '--ma5', '영업이익률', 1]]) {
+      const pts = ys.map((y, i) => y[key] == null ? null : [X(i), Y(y[key])]);
+      const seg = (a, b) => pts.slice(a, b + 1).filter(Boolean).map(p => p.join(',')).join(' ');
+      s += `<polyline fill="none" stroke="var(${col})" stroke-width="2" points="${seg(0, lastA)}"/>`;
+      if (lastA < n - 1) s += `<polyline fill="none" stroke="var(${col})" stroke-width="2" stroke-dasharray="5 4" points="${seg(lastA, n - 1)}"/>`;
+      pts.forEach((p, i) => { if (!p) return;
+        s += `<g><title>${ys[i].y}${ys[i].e ? 'E' : ''} ${nm} ${ys[i][key].toFixed(1)}%</title><circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(${col})" stroke="var(--surface)" stroke-width="2"/>
+          <text x="${p[0]}" y="${p[1] + (up > 0 ? 16 : -9)}" text-anchor="middle">${ys[i][key].toFixed(1)}%</text></g>`; });
+    }
+  }
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${s}</svg>`;
+}
+
 if (!code) location.replace('./');
 Promise.all([
   // 리포트 로그 종목이 아니면 매수 에지 탭이 만든 차트 전용 파일(data/charts)로 — 사용자 요청 11-11
@@ -769,12 +877,14 @@ Promise.all([
     .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
   fetch(`data/analysis/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   fetch('data/market.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch(`data/fin/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch(`data/biz/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
 ])
-  .then(([d, a, m]) => {
+  .then(([d, a, m, fin, biz]) => {
     data = d; analysis = a; market = m;
     idxMap = {};
     (m && d.market && m[d.market] || []).forEach(x => { idxMap[x.d] = x.c; });
-    renderHead(); drawChart(); renderRelPerf();
+    renderHead(); drawChart(); renderRelPerf(); renderCompany(fin, biz);
     if (d.chart_only) {                                     // 리포트 칸은 숨기고 차트만
       ['secCons', 'consensus', 'secFwd', 'forward', 'secBrk', 'brokers', 'secLog', 'log'].forEach(id => { document.getElementById(id).style.display = 'none'; });
       document.querySelectorAll('#fabMenu a').forEach(a => { if (!['#secChart', '#relHead'].includes(a.getAttribute('href'))) a.remove(); });
@@ -792,6 +902,7 @@ Promise.all([
 <nav class="fab" aria-label="페이지 이동">
   <div class="fab-menu" id="fabMenu" hidden>
     <a href="#secChart">차트</a>
+    <a href="#secCa" data-opt>기업 분석</a>
     <a href="#relHead" data-opt>시장 대비 성과</a>
     <a href="#secCons">통합 정리</a>
     <a href="#secFwd">앞을 보는 숫자</a>
@@ -819,7 +930,9 @@ Promise.all([
     const a = e.target.closest('a');
     if (!a) return;
     e.preventDefault();
-    document.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior: smooth, block: 'start'});
+    const tg = document.querySelector(a.getAttribute('href'));
+    if (tg && tg.tagName === 'DETAILS') tg.open = true;           // 기업 분석은 접혀 있으면 펼쳐서
+    tg?.scrollIntoView({behavior: smooth, block: 'start'});
     close();
   });
   document.getElementById('fabTop').onclick = () => { window.scrollTo({top: 0, behavior: smooth}); close(); };

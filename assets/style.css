@@ -641,3 +641,53 @@ a.edge-card:hover { border-color: var(--accent); }
 /* 폰: 외부 링크 3개(네이버·버틀러·밸리)는 종목명 아래 한 줄로 */
 .head .lk-br { display: none; }
 @media (max-width: 560px) { .head .lk-br { display: block; flex-basis: 100%; height: 0; } }
+
+/* 기업 분석 (종목 페이지, 차트 다음) — 접고 펴는 칸 하나에 사업 내용 · 투자포인트 · 이익 성장률 */
+.ca { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 14px 0 6px; padding: 0 16px; }
+.ca[open] { padding-bottom: 14px; }
+.ca > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px; padding: 13px 0; }
+.ca > summary::-webkit-details-marker { display: none; }
+.ca > summary::before { content: '▸'; color: var(--muted); transition: transform .15s; display: inline-block; }
+.ca[open] > summary::before { transform: rotate(90deg); }
+.ca-t { font-size: 17px; font-weight: 800; }
+.ca .sub, .ca .mut { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.ca-s { font-size: 15px; margin: 16px 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ca > div > .ca-s:first-child { margin-top: 2px; }
+.ca-line { margin: 0 0 8px; font-size: 14px; color: var(--text); }
+.ca-tw { overflow-x: auto; }
+.ca-tbl { width: 100%; border-collapse: collapse; font-size: 13px; word-break: keep-all; overflow-wrap: anywhere; }
+.ca-tbl th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ca-tbl td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ca-tbl .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ca-tbl td:first-child { font-weight: 600; }
+.ca-src { color: var(--muted); font-size: 11.5px; margin: 8px 0 2px; }
+.ca-ip { display: grid; gap: 8px; }
+.ip-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.ip-b { font-size: 13px; }
+.ip-b b { display: block; font-size: 14px; }
+.ip-b .tp { font-variant-numeric: tabular-nums; }
+.ip-b .t { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.ip-row ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.55; }
+.ip-row li.risk { color: var(--muted); list-style: none; margin-left: -16px; margin-top: 4px; }
+.ip-row li.risk::before { content: '리스크 · '; color: var(--down); font-weight: 600; }
+.ca-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ca-fig { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 10px 4px; min-width: 0; }
+.ca-fig.wide { grid-column: 1 / -1; }
+.ca-fig figcaption { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.ca-c svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.ca-fig text { font-size: 11px; fill: var(--text-2); font-variant-numeric: tabular-nums; }
+.ca-fig text.v { font-weight: 700; fill: var(--text); }
+.ca-fig text.pos { fill: var(--up); } .ca-fig text.neg { fill: var(--down); }
+.ca-fig text.ax { fill: var(--muted); }
+.ca-lg { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); }
+.ca-lg i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: 3px; margin-right: 5px; }
+.est-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--ma20) 30%, transparent); border: 1px dashed var(--ma20); vertical-align: -1px; }
+@media (max-width: 560px) {
+  .ca { padding: 0 12px; }
+  .ca[open] { padding-bottom: 12px; }
+  .ca-charts { grid-template-columns: 1fr; }
+  .ip-row { grid-template-columns: 1fr; gap: 6px; }
+  .ip-b b { display: inline; margin-right: 6px; }
+  .ca-tbl { font-size: 12.5px; }
+  .ca-tbl th, .ca-tbl td { padding: 7px 5px; }
+}
