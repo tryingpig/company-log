@@ -317,7 +317,8 @@ def verify_items(got, reports_by_id, broker_text):
 
 # ── 계산 ────────────────────────────────────────────────────────────────────
 
-KRW = {"조원": 10000, "십억원": 10, "억원": 1, "백만원": 0.01}
+KRW = {"조원": 10000, "조": 10000, "십억원": 10, "십억": 10, "억원": 1, "억": 1, "백만원": 0.01, "백만": 0.01}
+SCALES = (10000, 10, 1, 0.01)   # 단위 빠진 금액의 후보 자릿수(조·십억·억·백만) — 같은 항목 다른 증권사 값과 맞춘다
 HALF_LIFE = 30          # 최근 가중: 30일 지날 때마다 무게 절반 (build.py 와 같은 값)
 
 
@@ -363,13 +364,62 @@ def _period_key(p):
     return int(p) if re.fullmatch(r"20\d{2}", p) else None
 
 
-def build_table(metrics):
-    """(항목, 기간, 단위)별로 증권사마다 가장 최근 값 비교표. 2개사 이상만."""
+FIN_KEY = {"매출액": "rev", "영업이익": "op", "순이익": "ni", "지배순이익": "ni"}
+
+
+def fin_anchor(code):
+    """data/fin(DART 실적 + 와이즈리포트 추정, 억원) → {(항목, 기간): 억원}. 분기는 그해 ÷ 4. 단위 판정 기준."""
+    try:
+        ys = json.loads((ROOT / "data" / "fin" / f"{code}.json").read_text(encoding="utf-8"))["years"]
+    except Exception:
+        return {}
+    out = {}
+    for y in ys:
+        for item, k in FIN_KEY.items():
+            v = y.get(k)
+            if v and v > 0:
+                out[(item, y["y"])] = v
+                for qq in range(1, 5):
+                    out.setdefault((item, f"{qq}Q{y['y'][2:]}"), v / 4)
+    return out
+
+
+def _guess_unit(metrics, anchor=None):
+    """원문에 단위 없이 적힌 금액('2026E 매출액 192,874' = 십억원)을 같은 항목의 단위 있는 값과 자릿수로 맞춘다.
+    같은 항목·기간 → 없으면 같은 항목 같은 종류(분기/연간) 값의 중앙값에 가장 가까운 자릿수. 기준이 없으면 그대로(단위 미상)."""
+    import math
+    known = {}
+    for m in metrics:
+        v, u = _norm_unit(m["unit"], m["value"])
+        if u == "억원" and v and v > 0:
+            q = "Q" in (m["period"] or "") or "H" in (m["period"] or "")
+            known.setdefault((m["item"], m["period"]), []).append(v)
+            known.setdefault((m["item"], q), []).append(v)
+    med = lambda xs: sorted(xs)[len(xs) // 2]   # noqa: E731
+    out = {}
+    for m in metrics:
+        if (m["unit"] or "").strip() or not m["value"] or m["value"] <= 0:
+            continue
+        q = "Q" in (m["period"] or "") or "H" in (m["period"] or "")
+        r = (anchor or {}).get((m["item"], m["period"]))
+        if r is None:
+            ref = known.get((m["item"], m["period"])) or known.get((m["item"], q))
+            r = med(ref) if ref else None
+        if r:
+            out[id(m)] = round(m["value"] * min(SCALES, key=lambda k: abs(math.log(m["value"] * k / r))), 4)
+    return out
+
+
+def build_table(metrics, anchor=None):
+    """(항목, 기간, 단위)별로 증권사마다 가장 최근 값 비교표. 2개사 이상만. 금액은 억원으로 통일.
+    anchor(data/fin 실적·추정)가 있으면 단위 빠진 값의 자릿수와 '원문 단위 확인' 판정을 그 값 기준으로."""
     groups = {}
+    anchor = anchor or {}
+    guess = _guess_unit(metrics, anchor)
     for m in metrics:
         if not m["period"]:
             continue
-        val, unit = _norm_unit(m["unit"], m["value"])
+        val, unit = (guess[id(m)], "억원") if id(m) in guess else _norm_unit(m["unit"], m["value"])
         key = (m["item"], m["period"], unit)
         cur = groups.setdefault(key, {}).get(m["broker"])
         if not cur or m["id"] > cur["id"]:
@@ -383,7 +433,11 @@ def build_table(metrics):
         vals = sorted(m["value"] for m in per.values())
         med = vals[len(vals) // 2] if len(vals) % 2 else (vals[len(vals) // 2 - 1] + vals[len(vals) // 2]) / 2
 
+        ref = anchor.get((item, period)) if unit == "억원" else None
+
         def odd(v):
+            if ref:
+                return not (0.2 < v / ref < 5)
             if len(vals) == 2:
                 return vals[0] > 0 and vals[1] / vals[0] >= 5
             return med > 0 and v > 0 and not (0.2 < v / med < 5)
@@ -509,9 +563,9 @@ def current_multiples(metrics, close):
     return out
 
 
-def derive(a, close):
+def derive(a, close, code=None):
     """추출값에서 화면용 집계를 만든다(AI 재호출 없이 다시 돌릴 수 있게 분리)."""
-    a["table"] = build_table(a["metrics"])
+    a["table"] = build_table(a["metrics"], fin_anchor(code) if code else None)
     a["revisions"] = build_revisions(a["metrics"], a["revision_items"])
     a["current"] = current_multiples(a["metrics"], close)
     a["timeline"] = sorted(a["events"], key=lambda x: (x["sortkey"], x["date"]))
@@ -713,7 +767,7 @@ def finalize(a, d):
     a["code"], a["name"] = d["code"], d["name"]
     flip_ids = {str(r["id"]) for r in d["win_reports"] if r.get("flip")}
     a["flips"] = {k: v for k, v in (a.get("flips") or {}).items() if k in flip_ids}
-    derive(a, d.get("close"))
+    derive(a, d.get("close"), d["code"])
     a["coverage"] = coverage(a, d)
     win = {r["id"] for r in d["win_reports"]}
     a["pending"] = len(win - set(a["done"]))                  # 아직 추출 안 된 리포트 수

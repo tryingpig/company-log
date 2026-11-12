@@ -215,6 +215,32 @@ h2.sec .seg { margin-left: auto; }
   color: var(--text-2); background: var(--surface-2, transparent); border: 1px solid var(--line); }
 
 .tbl-wrap { overflow-x: auto; }
+/* 증권사 추정치 비교: 항목×기간 표 + 칸 눌러 증권사별 값 (11-13) */
+.ep-wrap { overflow-x: auto; }
+.ep { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ep th { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ep th:first-child, .ep td:first-child { text-align: left; }
+.ep td { padding: 8px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; white-space: nowrap; }
+.ep tr > td:first-child { font-weight: 700; color: var(--text); }
+.ep tr > td:first-child small { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.ep th:first-child, .ep tbody tr:not(.ep-pop) > td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.ep td b { font-size: 14px; color: var(--text); }
+.ep td small { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
+.ep td.na { color: var(--line); }
+.ep td.ec { cursor: pointer; }
+.ep td.ec small::after { content: " ▾"; }
+.ep td.ec:hover b { text-decoration: underline; }
+.ep td.ec.on { background: color-mix(in srgb, var(--ma20) 10%, transparent); box-shadow: inset 0 -2px 0 var(--ma20); }
+.ep tr.ep-pop > td { text-align: left; white-space: normal; padding: 10px 12px; background: color-mix(in srgb, var(--ma20) 6%, transparent); }
+.ep-pop .in { position: sticky; left: 12px; }
+.ep-pop .ph { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: 12.5px; margin-bottom: 6px; color: var(--text-2); }
+.ep-pop .ph b { color: var(--text); }
+.ep-pop .chips2 { display: flex; flex-wrap: wrap; gap: 6px; }
+.ep-pop .chips2 a { display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text-2); font-size: 12.5px; }
+.ep-pop .chips2 a:hover { border-color: var(--text-2); }
+.ep-pop .chips2 a b { color: var(--text); }
+.ep-pop .chips2 a i { font-style: normal; color: var(--muted); font-size: 11px; }
+.ep-pop .chips2 a.odd { border-style: dashed; color: var(--muted); }
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .tbl th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .tbl td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
