@@ -216,6 +216,14 @@ h2.sec .seg { margin-left: auto; }
 
 .tbl-wrap { overflow-x: auto; }
 /* 증권사 추정치 비교: 항목×기간 표 + 칸 눌러 증권사별 값 (11-13) */
+.ep-tog { margin-top: 4px; }
+.ep-tog > summary { list-style: none; cursor: pointer; }
+.ep-tog > summary::-webkit-details-marker { display: none; }
+.ep-tog > summary .h3 { display: flex; align-items: center; gap: 6px; }
+.ep-tog > summary .h3::before { content: '▸'; color: var(--muted); display: inline-block; transition: transform .15s; }
+.ep-tog[open] > summary .h3::before { transform: rotate(90deg); }
+.ep-tog .cnt { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ep-sub { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 .ep-wrap { overflow-x: auto; }
 .ep { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .ep th { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
