@@ -109,6 +109,9 @@ def run_fin(state, codes, today, max_n):
     except PermissionError:
         val = None
         print("스탁이지 세션 만료 — PER 비교 없이 오래된 것만 다시 받음")
+    except requests.ConnectionError:
+        print("스탁이지 접속 안 됨 — 실적 수집은 다음 실행에", flush=True)   # 사업 내용(DART)은 그대로 진행
+        return 1
     # 실적 발표가 지난 종목: 발표일이 마지막 수집일 뒤
     rd = {}
     try:
@@ -135,23 +138,28 @@ def run_fin(state, codes, today, max_n):
     order = {"실적 발표": 0, "추정치 변경": 1, "오래됨": 2, "new": 3}
     todo.sort(key=lambda c: order[why[c]])
     FIN.mkdir(parents=True, exist_ok=True)
-    done = fail = 0
+    done = fail = streak = 0
     for c in todo[:max_n]:
         try:
             f = fetch_fin(s, c)
+            streak = 0
         except PermissionError:
             f = None                                 # info-tab 은 로그인 없이도 열림 — 만료로 막히면 다음에
         except Exception as e:
-            print(f"  {c} 실적 수집 실패: {type(e).__name__}")
+            print(f"  {c} 실적 수집 실패: {type(e).__name__}", flush=True)
             f, fail = None, fail + 1
+            streak += isinstance(e, requests.ConnectionError)
+            if streak >= 3:                          # 서버 무응답 — 종목마다 90초씩 기다리지 말고 다음 실행에
+                print("스탁이지 접속 안 됨 — 실적 수집 중단, 다음 실행이 이어 받음", flush=True)
+                break
         if f:
             (FIN / f"{c}.json").write_text(json.dumps({"code": c, "fetched": today, "src": "스탁이지", **f},
                                                      ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             done += 1
-        st = state[c]
-        st["fin"] = today
-        if val and c in val:
-            st["eps"] = implied_eps(val[c])
+            st = state[c]
+            st["fin"] = today                        # 받은 종목만 — 실패한 종목은 다음 실행이 다시
+            if val and c in val:
+                st["eps"] = implied_eps(val[c])
         time.sleep(SE_GAP)
     if val:                                          # 안 받은 종목도 오늘 EPS 를 기준으로 (다음 비교용) — 받은 적 있는 것만
         for c in codes:
@@ -251,6 +259,7 @@ def run_biz(state, codes, today, max_n):
 
 
 def main():
+    sys.stdout.reconfigure(line_buffering=True)       # 파일로 돌려도 진행 상황이 바로 보이게
     today = datetime.now(KST).strftime("%Y-%m-%d")
     RAW.mkdir(parents=True, exist_ok=True)
     state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
