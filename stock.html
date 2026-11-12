@@ -775,9 +775,9 @@ function renderCompany(fin, biz) {
     parts.push('사업 내용');
     html.push(`<h3 class="ca-s">① 사업 내용</h3>
       <p class="ca-line">${esc(biz.line)}</p>
-      <div class="ca-tw"><table class="ca-tbl"><thead><tr><th>사업</th><th>주요 제품·역할</th><th>주요 수요처</th><th class="num">매출 비중</th></tr></thead>
+      <div class="ca-tw"><table class="ca-tbl"><thead><tr><th>사업</th><th>주요 제품·역할</th><th>주요 수요처</th><th class="num">매출 비중${biz.share_calc ? '<span class="mut" title="원문에 비중 % 가 없어 부문별 매출 금액 ÷ 합계로 계산">*</span>' : ''}</th></tr></thead>
       <tbody>${biz.rows.map(r => `<tr><td>${esc(r.biz)}</td><td>${esc(r.products)}</td><td>${esc(r.customers) || '<span class="mut">-</span>'}</td><td class="num">${esc(r.share) || '<span class="mut">-</span>'}</td></tr>`).join('')}</tbody></table></div>
-      <p class="ca-src">${(biz.notes || []).map(esc).join(' · ')}${biz.notes && biz.notes.length ? ' · ' : ''}DART ${esc(biz.report_nm)} 「사업의 내용」을 AI가 정리 · 사업보고서가 새로 나오면 다시 정리</p>`);
+      <p class="ca-src">${(biz.notes || []).map(esc).join(' · ')}${biz.notes && biz.notes.length ? ' · ' : ''}${biz.share_calc ? '* 매출 비중은 원문 부문별 매출 금액으로 계산 · ' : ''}${biz.share_gross ? '매출 비중은 부문 간 내부거래 제거 전이라 합이 100%를 넘음 · ' : ''}DART ${esc(biz.report_nm)} 「사업의 내용」을 AI가 정리 · 사업보고서가 새로 나오면 다시 정리</p>`);
   }
   const seen = new Set(), ips = [];
   for (const r of data.reports || []) if (r.win && !seen.has(r.broker)) { seen.add(r.broker); ips.push(r); }

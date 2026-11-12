@@ -36,7 +36,8 @@ STATE = RAW / "state.json"
 SE_GAP = 1.5                 # 스탁이지 종목별 요청 간격(초)
 FIN_STALE = 7                # 세션이 없을 때: 이 날수보다 오래된 것만 다시
 BIZ_RECHECK = 30             # 사업보고서 새로 나왔나 다시 볼 간격(일) — 3~4월은 매 실행
-BIZ_CHARS = 14000            # AI 에 넘길 「사업의 내용」 앞부분 길이
+BIZ_CHARS = 16000            # AI 에 넘길 「사업의 내용」 길이 (하위 장을 못 나눈 보고서는 앞부분)
+BIZ_PARTS = [(r"개요", 5000), (r"주요\s*제품|영업의\s*(현황|종류)", 5000), (r"매출", 6000)]   # 하위 장별 최대 글자
 
 
 def arg(name, default):
@@ -185,6 +186,23 @@ def biz_section(doc):
         return ""
     end = re.search(r"<TITLE[^>]*>\s*III\.", doc[m.end():])
     body = doc[m.start(): m.end() + end.start()] if end else doc[m.start(): m.start() + 400000]
+    # 하위 장(1. 사업의 개요 ~ 7. 기타) 중 개요·주요 제품·매출만 — 앞에서 자르면 매출 비중 표가 잘려 나감
+    parts = [p for p in re.split(r"(?=<TITLE[^>]*>\s*\d+\.\s)", body) if re.match(r"<TITLE[^>]*>\s*\d+\.", p)]
+    keep, etc = [], ""
+    for p in parts:
+        t = re.match(r"<TITLE[^>]*>([^<]*)", p).group(1)
+        cap = next((n for k, n in BIZ_PARTS if re.search(k, t)), 0)
+        if cap:
+            keep.append(clean(p)[:cap])
+        elif re.search(r"기타\s*참고", t):
+            etc = clean(p)                            # 산업 특성·시장 점유율이 여기 있는 회사가 많음 — 남는 분량만큼
+    if len(keep) < 2:
+        return clean(body)[:BIZ_CHARS]
+    left = BIZ_CHARS - sum(len(k) + 1 for k in keep)
+    return "\n".join(keep + ([etc[:left]] if etc and left > 500 else []))
+
+
+def clean(body):
     def table(t):                                     # 표는 한 행 = 한 줄 ("칸 | 칸 | 칸")
         rows = []
         for tr in re.split(r"</TR>", t.group(0), flags=re.I):
@@ -204,7 +222,8 @@ def latest_annual(corp, today):
     bgn = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=500)).strftime("%Y%m%d")
     j = screen.dart("list", corp_code=corp, bgn_de=bgn, end_de=today.replace("-", ""),
                     pblntf_detail_ty="A001", page_count=10)
-    rows = [x for x in j.get("list", []) if "사업보고서" in x.get("report_nm", "")]
+    rows = [x for x in j.get("list", []) if "사업보고서" in x.get("report_nm", "")
+            and "첨부" not in x["report_nm"]]          # [첨부정정]·[첨부추가] 는 감사보고서 등 첨부만 — 본문 없음
     rows.sort(key=lambda x: x["rcept_dt"], reverse=True)
     return rows[0] if rows else None
 
