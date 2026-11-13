@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261113f">
+<link rel="stylesheet" href="assets/style.css?v=20261113g">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -83,7 +83,7 @@
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
           <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
           <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승(모두 만족). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요.</li>
-          <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 「일별」은 외국인·기관의 날마다 순매수를 0선 위(순매수)·아래(순매도)로 쌓은 막대, 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
+          <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 「일별」은 외국인·기관의 날마다 순매수를 0선 위(순매수)·아래(순매도)로 쌓은 막대(개인은 위 줄에 숫자로만), 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
       </details>
@@ -465,9 +465,9 @@ function flowHead(t) {
   const lastBar = data.prices[data.prices.length - 1].d;
   const tabs = `<span class="fl-seg" role="group" aria-label="보기"><button type="button" data-m="cum" class="${flMode === 'cum' ? 'on' : ''}">누적</button><button type="button" data-m="day" class="${flMode === 'day' ? 'on' : ''}">일별</button></span>`;
   // 이름·값 글자는 선·막대 색과 같게 (11-13 사용자)
-  const vals = (flMode === 'cum' ? FL_WHO : FL_DAY).map(([k, nm, v]) => {
+  const vals = FL_WHO.map(([k, nm, v]) => {     // 일별도 개인은 글자로만(막대엔 없음)
     const n = flMode === 'cum' ? flCum[d][k] : flRows[d][k];
-    return `<span class="fl-v" style="color:var(${v})"><span class="${flMode === 'cum' ? 'ln' : 'sq'}" style="background:var(${v})"></span>${nm} <b>${fmtQty(n)}</b></span>`;
+    return `<span class="fl-v" style="color:var(${v})">${flMode === 'cum' ? `<span class="ln" style="background:var(${v})"></span>` : FL_DAY.some(x => x[0] === k) ? `<span class="sq" style="background:var(${v})"></span>` : ''}${nm} <b>${fmtQty(n)}</b></span>`;
   }).join('');
   const note = !t && days.length && days[days.length - 1] < lastBar ? `<span class="muted">· ${lastBar.slice(5).replace('-', '.')} 수급은 장 마감 뒤 저녁 갱신에 반영</span>` : '';
   head.innerHTML = `<b>수급</b>${tabs}<span class="muted">${flMode === 'cum' ? `${days[0].slice(5).replace('-', '.')}~${d.slice(5).replace('-', '.')} 누적 순매수` : `${d.slice(5).replace('-', '.')} 순매수`}</span>${vals}${note}`;
