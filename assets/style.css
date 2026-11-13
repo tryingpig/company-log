@@ -422,10 +422,10 @@ details.more summary { cursor: pointer; color: var(--text-2); font-size: 13px; m
 .fl-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .fl-seg button { font: inherit; border: 0; background: none; color: var(--text-2); padding: 1px 8px; cursor: pointer; }
 .fl-seg button.on { background: var(--text); color: var(--surface); }
-.fl-v { font: inherit; color: var(--text-2); background: none; border: 0; padding: 0; }
-button.fl-v { border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; cursor: pointer; }
-button.fl-v.on { border-color: var(--text-2); color: var(--text); }
-.fl-v b.pos { color: var(--up); } .fl-v b.neg { color: var(--down); }
+.fl-v { white-space: nowrap; }
+.fl-v .ln, .fl-v .sq { display: inline-block; margin-right: 4px; border-radius: 2px; }
+.fl-v .ln { width: 14px; height: 3px; vertical-align: middle; }
+.fl-v .sq { width: 10px; height: 10px; vertical-align: -1px; }
 #flchart { height: 150px; }
 @media (max-width: 480px) { #flchart { height: 130px; } }
 .rs-head { font-size: 12px; color: var(--muted); padding: 10px 4px 2px; border-top: 1px solid var(--line); margin-top: 4px; }

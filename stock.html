@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261113e">
+<link rel="stylesheet" href="assets/style.css?v=20261113f">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -83,7 +83,7 @@
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
           <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
           <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승(모두 만족). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요.</li>
-          <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 「일별」은 한 주체의 날마다 순매수(빨강 순매수 · 파랑 순매도), 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
+          <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 「일별」은 외국인·기관의 날마다 순매수를 0선 위(순매수)·아래(순매도)로 쌓은 막대, 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
       </details>
@@ -136,9 +136,10 @@ const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20'], [60, '--ma60']];
 let data, analysis = null, chart, candle, maSeries = [], bbSeries = [], dir = 'all';
 let bbOn = false, volOn = true, volSeries = null, volAvgSeries = null;
 let market = null, rchart = null, rsSeries = null, rsMap = {}, idxMap = {};
-let flow = null, flVis = [], fchart = null, flSeries = [], flRows = {}, flCum = {}, flMode = 'cum', flWho = 1;
+let flow = null, flVis = [], fchart = null, flSeries = [], flRows = {}, flCum = {}, flMode = 'cum';
 const FL_WHO = [[1, '외국인', '--fl-f'], [2, '기관', '--fl-o'], [3, '개인', '--fl-i']];
-try { flMode = localStorage.getItem('cl-flow') === 'day' ? 'day' : 'cum'; flWho = +localStorage.getItem('cl-flow-who') || 1; } catch (e) {}
+const FL_DAY = FL_WHO.slice(0, 2);     // 일별은 외국인·기관만 (11-13 사용자)
+try { flMode = localStorage.getItem('cl-flow') === 'day' ? 'day' : 'cum'; } catch (e) {}
 // 여러 칸(가격·수급·상대강도) 날짜 범위를 함께 움직인다
 const linked = [];
 let syncing = false;
@@ -421,10 +422,21 @@ function drawFlow(vis, hasRS) {
       return s;
     });
   } else {
-    const up = css('--up'), dn = css('--down');
-    const s = fchart.addHistogramSeries({priceLineVisible: false, lastValueVisible: false});
-    s.setData(days.map(d => flRows[d] ? {time: d, value: flRows[d][flWho], color: alpha(flRows[d][flWho] >= 0 ? up : dn, 0.7)} : {time: d}));
-    flSeries = [s];
+    // 위아래로 쌓은 막대: 0선 위 = 순매수, 아래 = 순매도. 외국인이 0선 쪽, 기관이 그 바깥.
+    // 쌓기가 없어 바깥 층(합계)을 먼저 그리고 안쪽 층(외국인)을 덮어 그린다
+    const layers = [];
+    for (const side of [1, -1]) for (let L = FL_DAY.length - 1; L >= 0; L--)
+      layers.push({side, L, s: fchart.addHistogramSeries({priceLineVisible: false, lastValueVisible: false}), pts: []});
+    days.forEach(d => {
+      const r = flRows[d];
+      for (const side of [1, -1]) {
+        let acc = 0;
+        const tops = r ? FL_DAY.filter(([k]) => r[k] * side > 0).map(([k, , v]) => ({value: acc += r[k], color: css(v)})) : [];
+        layers.forEach(ly => { if (ly.side === side) ly.pts.push(tops[ly.L] ? {time: d, ...tops[ly.L]} : {time: d}); });
+      }
+    });
+    layers.forEach(ly => ly.s.setData(ly.pts));
+    flSeries = layers.map(ly => ly.s);
   }
   flSeries[0].createPriceLine({price: 0, color: css('--muted'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false});
   chart.applyOptions({timeScale: {visible: false}});
@@ -442,7 +454,7 @@ function drawFlow(vis, hasRS) {
 function crossFlow(t) {
   if (!fchart) return;
   const r = t && (flMode === 'cum' ? flCum[t] : flRows[t]);
-  if (r) fchart.setCrosshairPosition(r[flMode === 'cum' ? 1 : flWho], t, flSeries[0]);
+  if (r) fchart.setCrosshairPosition(flMode === 'cum' ? r[1] : 0, t, flSeries[0]);
   else fchart.clearCrosshairPosition();
   flowHead(t);
 }
@@ -452,10 +464,10 @@ function flowHead(t) {
   const d = t && flCum[t] ? t : days[days.length - 1];
   const lastBar = data.prices[data.prices.length - 1].d;
   const tabs = `<span class="fl-seg" role="group" aria-label="보기"><button type="button" data-m="cum" class="${flMode === 'cum' ? 'on' : ''}">누적</button><button type="button" data-m="day" class="${flMode === 'day' ? 'on' : ''}">일별</button></span>`;
-  const vals = FL_WHO.map(([k, nm, v]) => {
+  // 이름·값 글자는 선·막대 색과 같게 (11-13 사용자)
+  const vals = (flMode === 'cum' ? FL_WHO : FL_DAY).map(([k, nm, v]) => {
     const n = flMode === 'cum' ? flCum[d][k] : flRows[d][k];
-    const pick = flMode === 'day';
-    return `<${pick ? 'button type="button"' : 'span'} class="fl-v${pick && k === flWho ? ' on' : ''}" data-w="${k}"${pick ? ` aria-pressed="${k === flWho}"` : ''}>${flMode === 'cum' ? `<span class="sw" style="background:var(${v})"></span>` : ''}${nm} <b class="${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${fmtQty(n)}</b></${pick ? 'button' : 'span'}>`;
+    return `<span class="fl-v" style="color:var(${v})"><span class="${flMode === 'cum' ? 'ln' : 'sq'}" style="background:var(${v})"></span>${nm} <b>${fmtQty(n)}</b></span>`;
   }).join('');
   const note = !t && days.length && days[days.length - 1] < lastBar ? `<span class="muted">· ${lastBar.slice(5).replace('-', '.')} 수급은 장 마감 뒤 저녁 갱신에 반영</span>` : '';
   head.innerHTML = `<b>수급</b>${tabs}<span class="muted">${flMode === 'cum' ? `${days[0].slice(5).replace('-', '.')}~${d.slice(5).replace('-', '.')} 누적 순매수` : `${d.slice(5).replace('-', '.')} 순매수`}</span>${vals}${note}`;
@@ -463,11 +475,6 @@ function flowHead(t) {
     if (flMode === b.dataset.m) return;
     flMode = b.dataset.m;
     try { localStorage.setItem('cl-flow', flMode); } catch (e) {}
-    redrawKeep();
-  });
-  head.querySelectorAll('button[data-w]').forEach(b => b.onclick = () => {
-    flWho = +b.dataset.w;
-    try { localStorage.setItem('cl-flow-who', String(flWho)); } catch (e) {}
     redrawKeep();
   });
 }
