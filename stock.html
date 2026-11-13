@@ -578,13 +578,15 @@ function updateLegend(p) {
   }
   if (!bar) return;
   const vb = bars.find(b => b.d === bar.d);
+  const vi = bars.indexOf(vb), pc = vi > 0 ? bars[vi - 1].c : null;      // 전일 대비 등락률 (11-13 사용자)
+  const dchg = pc ? (bar.c / pc - 1) * 100 : null;
   const va = vb && volAvg(bars)[vb.d];
   const vr = vb && va ? vb.v / va : null;
   const live = vb && isIntraday(vb.d);
   const volTxt = !volOn ? '끔'
     : `${fmtVol(vb?.v)}${vr != null ? ` · 평소의 ${vr.toFixed(1)}배 <b class="vol-${volWord(vr) === '급증' || volWord(vr) === '많음' ? 'hi' : volWord(vr) === '적음' ? 'lo' : 'mid'}">${volWord(vr)}</b>` : ''}${live ? ' <span class="muted">(장중 집계)</span>' : ''}`;
   document.getElementById('legend').innerHTML =
-    `<span class="date">${bar.d}</span><span>종가 ${fmt(bar.c)}</span>` +
+    `<span class="date">${bar.d}</span><span>종가 ${fmt(bar.c)}${dchg != null ? ` <b class="${dchg > 0 ? 'pos' : dchg < 0 ? 'neg' : ''}">${dchg > 0 ? '+' : ''}${dchg.toFixed(2)}%</b>` : ''}</span>` +
     MAS.map(([n, v], i) => `<span><span class="sw" style="background:var(${v})"></span>${n}일 ${fmt(mas[i])}</span>`).join('') +
     `<button type="button" class="bb-tog${bbOn ? ' on' : ''}" id="bbTog" aria-pressed="${bbOn}"><span class="sw dash"></span>볼린저 ${bbOn ? `${fmt(bb[0])} / ${fmt(bb[1])}` : '끔'}</button>` +
     `<button type="button" class="bb-tog vol-tog${volOn ? ' on' : ''}" id="volTog" aria-pressed="${volOn}" title="평소 = 그날을 뺀 직전 20거래일 평균 거래량. 1.5배 이상 많음 · 2배 이상 급증 · 0.7배 미만 적음"><span class="sw bar"></span>거래량 ${volTxt}</button>` +
