@@ -2,7 +2,8 @@
 """매일 갱신: 데이터 빌드 → 새 리포트만 AI 정리 → GitHub 반영. 스케줄러 CompanyLogDaily(평일 10:00·15:40·20:05)·CompanyLogLight(--light, 08:30·11:30·14:00)가 실행한다.
 
   1) build.py (Python39-32): 일봉·3개월 구간·통합 목표가(최근 가중)·증권사별 표
-  1-1) 정규 실행: company.py — 기업 분석 자료(DART 실적 + 와이즈리포트 추정, DART 사업보고서 「사업의 내용」 원문) → 끝에 bizsum 이 새 사업보고서만 AI 정리
+  1-1) 정규 실행: flow.py — 투자자별 순매수(외국인·기관·개인, 네이버) 차트 아래 '수급' 칸
+  1-2) 정규 실행: company.py — 기업 분석 자료(DART 실적 + 와이즈리포트 추정, DART 사업보고서 「사업의 내용」 원문) → 끝에 bizsum 이 새 사업보고서만 AI 정리
   2) analyze.run_async: 3개월 안 리포트 3건 이상 종목 + 이미 정리한 종목, 새 리포트만 추출·의견 정리
   3) index.json 에 종목별 AI 정리 상태를 붙이고 git push (실행 중에도 30분마다)
   4) 정규 실행이면 prune.run: 매달 첫 저녁 실행에 3개월 넘은 기록을 합침(전체는 PC 보관소), 디스크 5GB 밑이면 알림
@@ -147,6 +148,21 @@ def run_edges():
     return None
 
 
+def run_flow():
+    """투자자별 순매수(flow.py, 네이버). 매수 에지(data/charts) 다음에 돈다. 실패해도 나머지는 계속."""
+    log("수급 시작")
+    try:
+        r = subprocess.run([PY39, str(ROOT / "tools" / "flow.py")], cwd=ROOT, capture_output=True, timeout=900)
+    except subprocess.TimeoutExpired:
+        return "수급 15분 넘게 걸려 중단 (기존 화면 유지)"
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace")
+    for ln in out.strip().splitlines()[-2:]:
+        log(f"  flow | {ln}")
+    if r.returncode:
+        return f"수급 수집 실패 (exit {r.returncode}) — " + (out.strip().splitlines() or [""])[-1][:200]
+    return None
+
+
 def run_company():
     """기업 분석 자료(company.py): 스탁이지 실적·추정(바뀐 종목만) + DART 사업보고서 「사업의 내용」 원문. 실패해도 나머지는 계속."""
     log("기업 분석 자료 시작")
@@ -180,6 +196,7 @@ async def main_async():
     earn_problem = run_earnings()
     scr_problem = None if LIGHT else run_screen()          # DART 를 많이 부른다 → 정규 실행에서만
     edge_problem = None if LIGHT else run_edges()
+    flow_problem = None if LIGHT else run_flow()
     comp_problem = None if LIGHT else run_company()
     push("데이터 빌드")
 
@@ -197,7 +214,7 @@ async def main_async():
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")
-    problems = [p for p in (earn_problem, scr_problem, edge_problem, comp_problem) if p]
+    problems = [p for p in (earn_problem, scr_problem, edge_problem, flow_problem, comp_problem) if p]
     if biz_fail:
         problems.append(f"사업 내용 정리 실패 {len(biz_fail)}종목 (다음 실행이 다시 시도)")
     if st["stopped"]:

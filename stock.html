@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261113d">
+<link rel="stylesheet" href="assets/style.css?v=20261113e">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -40,6 +40,8 @@
     <div class="edge-strip" id="edgeStripBox" hidden>
       <canvas id="edgeStrip" height="10" aria-label="날짜별 매수·매도 에지 상태"></canvas><span class="es-lab">에지 상태 · 빨강 매수 에지 · 파랑 매도 에지 · 회색 둘 다 아님</span>
     </div>
+    <div class="fl-head" id="flHead" hidden></div>
+    <div id="flchart" hidden></div>
     <div class="rs-head" id="rsHead" hidden></div>
     <div id="rschart" hidden></div>
     <div class="chart-key">
@@ -81,6 +83,7 @@
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
           <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
           <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승(모두 만족). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요.</li>
+          <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 「일별」은 한 주체의 날마다 순매수(빨강 순매수 · 파랑 순매도), 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
       </details>
@@ -133,6 +136,19 @@ const MAS = [[5, '--ma5'], [10, '--ma10'], [20, '--ma20'], [60, '--ma60']];
 let data, analysis = null, chart, candle, maSeries = [], bbSeries = [], dir = 'all';
 let bbOn = false, volOn = true, volSeries = null, volAvgSeries = null;
 let market = null, rchart = null, rsSeries = null, rsMap = {}, idxMap = {};
+let flow = null, flVis = [], fchart = null, flSeries = [], flRows = {}, flCum = {}, flMode = 'cum', flWho = 1;
+const FL_WHO = [[1, '외국인', '--fl-f'], [2, '기관', '--fl-o'], [3, '개인', '--fl-i']];
+try { flMode = localStorage.getItem('cl-flow') === 'day' ? 'day' : 'cum'; flWho = +localStorage.getItem('cl-flow-who') || 1; } catch (e) {}
+// 여러 칸(가격·수급·상대강도) 날짜 범위를 함께 움직인다
+const linked = [];
+let syncing = false;
+function linkChart(c) {
+  linked.push(c);
+  c.timeScale().subscribeVisibleLogicalRangeChange(r => {
+    if (syncing || !r) return;
+    syncing = true; linked.forEach(o => { if (o !== c) o.timeScale().setVisibleLogicalRange(r); }); syncing = false;
+  });
+}
 const MKT_NAME = {KOSPI: '코스피', KOSDAQ: '코스닥'};
 const REL_PERIODS = [['1주', 5], ['1개월', 21], ['3개월', 63], ['6개월', null]];
 try { bbOn = localStorage.getItem('cl-bb') === '1'; } catch (e) {}
@@ -225,12 +241,14 @@ function drawChart() {
   const rsVis = vis.filter(b => idxMap[b.d]);          // 지수와 날짜가 맞는 일봉만
   const hasRS = rsVis.length > 20;
   if (rchart) { rchart.remove(); rchart = null; }
+  if (fchart) { fchart.remove(); fchart = null; }
+  linked.length = 0;
 
   chart = LightweightCharts.createChart(el, {
     autoSize: true,
     layout: {background: {color: 'transparent'}, textColor: css('--text-2'), fontSize: 12},
     grid: {vertLines: {visible: false}, horzLines: {color: css('--line')}},
-    rightPriceScale: {borderVisible: false},
+    rightPriceScale: {borderVisible: false, minimumWidth: 78},
     timeScale: {borderVisible: false, fixLeftEdge: true, fixRightEdge: true},
     crosshair: {mode: LightweightCharts.CrosshairMode.Normal},
     localization: {priceFormatter: p => Math.round(p).toLocaleString('ko-KR')},
@@ -309,11 +327,14 @@ function drawChart() {
   markers.sort((a, b) => a.time < b.time ? -1 : 1);
   candle.setMarkers(markers);
   chart.timeScale().fitContent();
+  linkChart(chart);
+  drawFlow(vis, hasRS);
   if (hasRS) drawRS(rsVis);
   drawEdge(vis);
 
   chart.subscribeCrosshairMove(p => {
     updateLegend(p.time ? p : null);
+    crossFlow(p.time);
     if (!rchart) return;
     if (p.time && rsMap[p.time] != null) rchart.setCrosshairPosition(rsMap[p.time], p.time, rsSeries);
     else rchart.clearCrosshairPosition();
@@ -364,6 +385,101 @@ function drawEdge(vis) {
   requestAnimationFrame(paint);
 }
 
+// 수급: 외국인·기관·개인 순매수(주). 「누적」 = 차트 첫날부터 쌓은 선 3개, 「일별」 = 한 주체 막대
+function fmtQty(v, sign = true) {
+  if (v == null) return '-';
+  const a = Math.abs(v), s = sign ? (v > 0 ? '+' : v < 0 ? '−' : '') : (v < 0 ? '−' : '');
+  if (a >= 1e8) return s + (a / 1e8).toFixed(a >= 1e9 ? 0 : 1) + '억주';
+  if (a >= 1e4) return s + (a / 1e4).toFixed(a >= 1e6 ? 0 : 1).replace(/\.0$/, '') + '만주';
+  return s + a.toLocaleString('ko-KR') + '주';
+}
+function drawFlow(vis, hasRS) {
+  flVis = vis;
+  const box = document.getElementById('flchart'), head = document.getElementById('flHead');
+  if (!flow || !flow.rows || !flow.rows.length) { box.hidden = head.hidden = true; return; }
+  flRows = {}; flow.rows.forEach(r => { flRows[r[0]] = r; });
+  const days = vis.map(b => b.d);
+  if (!days.some(d => flRows[d])) { box.hidden = head.hidden = true; return; }
+  flCum = {};
+  const run = [0, 0, 0, 0];
+  days.forEach(d => { const r = flRows[d]; if (r) { for (let k = 1; k < 4; k++) run[k] += r[k]; flCum[d] = run.slice(); } });
+  box.hidden = head.hidden = false;
+  fchart = LightweightCharts.createChart(box, {
+    autoSize: true,
+    layout: {background: {color: 'transparent'}, textColor: css('--text-2'), fontSize: 12},
+    grid: {vertLines: {visible: false}, horzLines: {color: css('--line')}},
+    rightPriceScale: {borderVisible: false, minimumWidth: 78, scaleMargins: {top: 0.1, bottom: 0.08}},
+    timeScale: {borderVisible: false, fixLeftEdge: true, fixRightEdge: true, visible: !hasRS},
+    crosshair: {mode: LightweightCharts.CrosshairMode.Normal},
+    localization: {priceFormatter: v => fmtQty(Math.round(v), false).replace('주', '')},
+  });
+  // 날짜 칸을 가격 차트와 똑같이 맞춘다(수급이 없는 날은 빈 칸) — 범위 연결이 칸 번호 기준이라서
+  if (flMode === 'cum') {
+    flSeries = FL_WHO.map(([k, , v]) => {
+      const s = fchart.addLineSeries({color: css(v), lineWidth: 2, priceLineVisible: false, lastValueVisible: false});
+      s.setData(days.map(d => flCum[d] ? {time: d, value: flCum[d][k]} : {time: d}));
+      return s;
+    });
+  } else {
+    const up = css('--up'), dn = css('--down');
+    const s = fchart.addHistogramSeries({priceLineVisible: false, lastValueVisible: false});
+    s.setData(days.map(d => flRows[d] ? {time: d, value: flRows[d][flWho], color: alpha(flRows[d][flWho] >= 0 ? up : dn, 0.7)} : {time: d}));
+    flSeries = [s];
+  }
+  flSeries[0].createPriceLine({price: 0, color: css('--muted'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false});
+  chart.applyOptions({timeScale: {visible: false}});
+  fchart.timeScale().fitContent();
+  linkChart(fchart);
+  fchart.subscribeCrosshairMove(p => {
+    const b = p.time && data.prices.find(x => x.d === p.time);
+    if (b) { chart.setCrosshairPosition(b.c, p.time, candle); updateLegend({time: p.time, fromRS: true}); }
+    else { chart.clearCrosshairPosition(); updateLegend(null); }
+    if (rchart) { if (p.time && rsMap[p.time] != null) rchart.setCrosshairPosition(rsMap[p.time], p.time, rsSeries); else rchart.clearCrosshairPosition(); }
+    flowHead(p.time);
+  });
+  flowHead(null);
+}
+function crossFlow(t) {
+  if (!fchart) return;
+  const r = t && (flMode === 'cum' ? flCum[t] : flRows[t]);
+  if (r) fchart.setCrosshairPosition(r[flMode === 'cum' ? 1 : flWho], t, flSeries[0]);
+  else fchart.clearCrosshairPosition();
+  flowHead(t);
+}
+function flowHead(t) {
+  const head = document.getElementById('flHead');
+  const days = Object.keys(flCum).sort();
+  const d = t && flCum[t] ? t : days[days.length - 1];
+  const lastBar = data.prices[data.prices.length - 1].d;
+  const tabs = `<span class="fl-seg" role="group" aria-label="보기"><button type="button" data-m="cum" class="${flMode === 'cum' ? 'on' : ''}">누적</button><button type="button" data-m="day" class="${flMode === 'day' ? 'on' : ''}">일별</button></span>`;
+  const vals = FL_WHO.map(([k, nm, v]) => {
+    const n = flMode === 'cum' ? flCum[d][k] : flRows[d][k];
+    const pick = flMode === 'day';
+    return `<${pick ? 'button type="button"' : 'span'} class="fl-v${pick && k === flWho ? ' on' : ''}" data-w="${k}"${pick ? ` aria-pressed="${k === flWho}"` : ''}>${flMode === 'cum' ? `<span class="sw" style="background:var(${v})"></span>` : ''}${nm} <b class="${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${fmtQty(n)}</b></${pick ? 'button' : 'span'}>`;
+  }).join('');
+  const note = !t && days.length && days[days.length - 1] < lastBar ? `<span class="muted">· ${lastBar.slice(5).replace('-', '.')} 수급은 장 마감 뒤 저녁 갱신에 반영</span>` : '';
+  head.innerHTML = `<b>수급</b>${tabs}<span class="muted">${flMode === 'cum' ? `${days[0].slice(5).replace('-', '.')}~${d.slice(5).replace('-', '.')} 누적 순매수` : `${d.slice(5).replace('-', '.')} 순매수`}</span>${vals}${note}`;
+  head.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    if (flMode === b.dataset.m) return;
+    flMode = b.dataset.m;
+    try { localStorage.setItem('cl-flow', flMode); } catch (e) {}
+    redrawKeep();
+  });
+  head.querySelectorAll('button[data-w]').forEach(b => b.onclick = () => {
+    flWho = +b.dataset.w;
+    try { localStorage.setItem('cl-flow-who', String(flWho)); } catch (e) {}
+    redrawKeep();
+  });
+}
+// 보기 전환: 수급 칸만 다시 그리고 보고 있던 날짜 범위는 유지
+function redrawKeep() {
+  const r = chart.timeScale().getVisibleLogicalRange();
+  linked.splice(linked.indexOf(fchart), 1);
+  fchart.remove(); fchart = null;
+  drawFlow(flVis, !!rchart);
+  if (r) fchart.timeScale().setVisibleLogicalRange(r);
+}
+
 // 상대강도: 종목 ÷ 지수, 차트 첫날 = 100. 가격 눈금과 섞이지 않게 아래 칸에 따로 그린다
 function drawRS(rows) {
   const box = document.getElementById('rschart');
@@ -377,7 +493,7 @@ function drawRS(rows) {
     autoSize: true,
     layout: {background: {color: 'transparent'}, textColor: css('--text-2'), fontSize: 12},
     grid: {vertLines: {visible: false}, horzLines: {color: css('--line')}},
-    rightPriceScale: {borderVisible: false, scaleMargins: {top: 0.12, bottom: 0.08}},
+    rightPriceScale: {borderVisible: false, minimumWidth: 78, scaleMargins: {top: 0.12, bottom: 0.08}},
     timeScale: {borderVisible: false, fixLeftEdge: true, fixRightEdge: true},
     crosshair: {mode: LightweightCharts.CrosshairMode.Normal},
     localization: {priceFormatter: v => v.toFixed(0)},
@@ -395,18 +511,15 @@ function drawRS(rows) {
   rsSeries.createPriceLine({price: 100, color: css('--muted'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false});
   // 날짜축은 아래 칸에만 두고 두 차트의 범위·십자선을 맞춘다
   chart.applyOptions({timeScale: {visible: false}});
+  if (fchart) fchart.applyOptions({timeScale: {visible: false}});
   rchart.timeScale().fitContent();
   chart.timeScale().fitContent();
-  let syncing = false;
-  const link = (a, b) => a.timeScale().subscribeVisibleLogicalRangeChange(r => {
-    if (syncing || !r) return;
-    syncing = true; b.timeScale().setVisibleLogicalRange(r); syncing = false;
-  });
-  link(chart, rchart); link(rchart, chart);
+  linkChart(rchart);
   rchart.subscribeCrosshairMove(p => {
     const b = p.time && data.prices.find(x => x.d === p.time);
     if (b) { chart.setCrosshairPosition(b.c, p.time, candle); updateLegend({time: p.time, fromRS: true}); }
     else { chart.clearCrosshairPosition(); updateLegend(null); }
+    crossFlow(p.time);
   });
 }
 
@@ -1018,9 +1131,10 @@ Promise.all([
   fetch('data/market.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   fetch(`data/fin/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   fetch(`data/biz/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch(`data/flow/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
 ])
-  .then(([d, a, m, fin, biz]) => {
-    data = d; analysis = a; market = m;
+  .then(([d, a, m, fin, biz, fl]) => {
+    data = d; analysis = a; market = m; flow = fl;
     idxMap = {};
     (m && d.market && m[d.market] || []).forEach(x => { idxMap[x.d] = x.c; });
     renderHead(); drawChart(); renderRelPerf(); renderCompany(fin, biz);
