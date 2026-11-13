@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261113g">
+<link rel="stylesheet" href="assets/style.css?v=20261114a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -630,10 +630,15 @@ const bullets = (arr, cls = '') => arr && arr.length ? `<ul class="bul ${cls}">$
 const hlNum = s => esc(s).replace(/[+\-−]?\d[\d,]*(?:\.\d+)?\s?(?:조원|억원|만원|조|억|원|%p|%|배|bp)/g, m => `<b class="hl">${m}</b>`)
   .replace(/→/g, '<span class="ar">→</span>');
 function viewKind(s) {
+  // 11-14부터 AI가 줄 머리말을 직접 단다. 반등/하락 포인트 = 우세 방향의 반대편 (리포트 속 언급만)
+  const h = s.match(/^(상향 근거|하향 근거|리스크|시각 차이|흐름 변화|반등 포인트|하락 포인트)\s*[:：]\s*/);
+  if (h) return [{'상향 근거': 'up', '하향 근거': 'down', '리스크': 'risk', '시각 차이': 'split', '흐름 변화': 'flow',
+                  '반등 포인트': 'opp-up', '하락 포인트': 'opp-down'}[h[1]], h[1], s.slice(h[0].length)];
+  // 머리말 없는 옛 정리분은 문장 속 낱말로 추측
   const m = s.match(/^최근\s*\d+개월\s*공통\s*(상향|하향)\s*근거\s*[:：]\s*/);
   if (m) return [m[1] === '상향' ? 'up' : 'down', `${m[1]} 근거`, s.slice(m[0].length)];
   if (/^이전/.test(s)) return ['flow', '흐름 변화', s];
-  const d = s.match(/(상향|하향)\s*(?:의\s*)?근거/);
+  const d = s.match(/(상향|하향)\s*(?:의\s*)?(?:근거|이유)/);
   if (d && !/리스크/.test(s)) return [d[1] === '상향' ? 'up' : 'down', `${d[1]} 근거`, s];
   if (/리스크|우려|부담/.test(s)) return ['risk', '리스크', s];
   if (/엇갈|반면|시각/.test(s)) return ['split', '시각 차이', s];
@@ -730,7 +735,7 @@ function renderConsensus() {
     if (a.table?.length) html += `<details class="ep-tog" id="epTog"><summary><h3 class="h3">증권사 추정치 비교 <span class="ai-badge">AI 추출</span> <span class="cnt">${new Set(a.table.map(r => r.item)).size}개 항목</span></h3></summary>
       <p class="ep-sub">증권사별 가장 최근 값의 최근 가중 평균 · 작은 글씨 = 증권사 수·범위 · 칸을 누르면 증권사별 값 · 분기·연도만 · ⚠ 원문 단위 확인 필요(평균 제외)</p>${estPivot(a.table)}</details>`;
     const cv = a.coverage;
-    html += `<div class="ai-note"><b>AI 요약 안내</b> · 핵심 숫자·증권사 추정치 비교·통합 의견은 아래 리포트 로그의 증권사 리포트 요약(최근 3개월)을 AI(Claude)가 정리한 것이에요. 리포트에 적힌 내용만 옮기게 했고, 투자 의견이 아니에요. 숫자는 원문 구절과 대조해 확인된 것만 표시해요. 새 리포트가 들어오거나 3개월이 지나 리포트가 빠지면 다시 정리해요 (정리 ${esc(a.generated)})${cv ? `<br>처리 범위: 요약 ${cv.lines}줄(숫자 포함 ${cv.numeric}줄) 중 ${cv.lines - cv.missing.length}줄 처리 — 추출 ${cv.with_items}줄 · 해당 없음 ${cv.skipped}줄${cv.retried ? ` · 재질문 ${cv.retried}줄` : ''}${cv.missing.length ? ` · <b class="odd-txt">미처리 ${cv.missing.length}줄</b>` : ''}` : ''}</div>`;
+    html += `<div class="ai-note"><b>AI 요약 안내</b> · 핵심 숫자·증권사 추정치 비교·통합 의견은 아래 리포트 로그의 증권사 리포트 요약(최근 3개월)을 AI(Claude)가 정리한 것이에요. 리포트에 적힌 내용만 옮기게 했고, 투자 의견이 아니에요. 숫자는 원문 구절과 대조해 확인된 것만 표시해요. 반등·하락 포인트는 최근 1개월 상향·하향 건수로 정한 우세 방향의 반대편 요인을 리포트에 적힌 것만 모은 줄이에요. 새 리포트가 들어오거나 3개월이 지나 리포트가 빠지면 다시 정리해요 (정리 ${esc(a.generated)})${cv ? `<br>처리 범위: 요약 ${cv.lines}줄(숫자 포함 ${cv.numeric}줄) 중 ${cv.lines - cv.missing.length}줄 처리 — 추출 ${cv.with_items}줄 · 해당 없음 ${cv.skipped}줄${cv.retried ? ` · 재질문 ${cv.retried}줄` : ''}${cv.missing.length ? ` · <b class="odd-txt">미처리 ${cv.missing.length}줄</b>` : ''}` : ''}</div>`;
   } else {
     html += `<div class="ai-note">증권사 추정치·의견 AI 정리는 아직 준비 중이에요</div>`;
   }

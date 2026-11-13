@@ -125,7 +125,16 @@ flips — 입력에서 [전환] 표시된 리포트 전부, 그 리포트 본문
 overall:
 - numbers: 최근 1개월 리포트에서 여러 증권사가 공통으로 언급한 숫자를 먼 기간(28E·27E)부터. 최근 1개월에 없으면 그 전 것. 3~5줄.
 - view: 먼저 최근 1개월 리포트들이 공통으로 짚은 상향/하향 이유와 엇갈리는 지점, 그다음 그 이전과 달라진 점이 있으면
-  "이전(8월)에는 …였으나 최근 …" 형태로 1줄. 2~4줄."""
+  "이전(8월)에는 …였으나 최근 …" 형태로 1줄. 2~4줄.
+- view 각 줄은 머리말 하나로 시작한다: "상향 근거:", "하향 근거:", "리스크:", "시각 차이:", "흐름 변화:", "반등 포인트:", "하락 포인트:".
+  (공통 이유 = 상향/하향 근거, 엇갈리는 지점 = 시각 차이, 이전과 달라진 점 = 흐름 변화)
+- view 반대편 줄 — 입력 머리의 '우세'를 따른다:
+  · 하향 우세면 마지막에 "반등 포인트: …" 1줄 = 리포트 본문에 실제로 적힌 회복 조건·긍정 요인(하향 리포트 안의 언급 포함).
+  · 상향 우세면 마지막에 "하락 포인트: …" 1줄 = 리포트 본문에 실제로 적힌 리스크·꺾일 조건(상향 리포트 안의 언급 포함).
+  · 근거마다 증권사명을 괄호로 붙인다("콤프 객실 확대가 고정비 상쇄의 관건(iM증권)"). 리포트에 없는 추측·전망은 쓰지 않는다.
+  · 리포트의 단서·강도 표현(관건·조건·예상·제한적 등)을 그대로 살린다. '관건'을 '가능'으로 바꾸는 식으로 세게 옮기지 않는다.
+  · 리포트에 그런 언급이 없으면 "반등 포인트: 리포트에 언급 없음"(또는 "하락 포인트: 리포트에 언급 없음").
+  · '균형'이면 이 줄을 쓰지 않는다."""
 
 
 # ── 공통 ────────────────────────────────────────────────────────────────────
@@ -606,9 +615,19 @@ def basis_latest(basis):
 
 # ── 2단계: 의견 정리 ─────────────────────────────────────────────────────────
 
+def lean(reports, now=None):
+    """우세 방향(코드 계산): 최근 1개월 리포트의 상향·하향 건수, 1개월 안에 없으면 3개월 전체."""
+    cut = ((now or datetime.now(KST)) - timedelta(days=31)).strftime("%Y-%m-%d")
+    rs = [r for r in reports if r["date"][:10] >= cut] or reports
+    up, dn = sum(r["dir"] == "up" for r in rs), sum(r["dir"] == "down" for r in rs)
+    span = "최근 1개월" if rs is not reports else "최근 3개월"
+    side = "상향 우세 (반대편 줄 = 하락 포인트)" if up > dn else "하향 우세 (반대편 줄 = 반등 포인트)" if dn > up else "균형 (반대편 줄 없음)"
+    return f"우세: {span} 상향 {up}건 · 하향 {dn}건 → {side}"
+
+
 def summary_prompt(d):
     lines = [f"종목: {d['name']} ({d['code']}) / 기준일 {datetime.now(KST).strftime('%Y-%m-%d')}",
-             f"리포트 {len(d['reports'])}건 (오래된 순, 최근 3개월)", ""]
+             f"리포트 {len(d['reports'])}건 (오래된 순, 최근 3개월)", lean(d["reports"]), ""]
     for r in sorted(d["reports"], key=lambda r: r["id"]):
         tgt = f"{r['from']:,} → {r['to']:,}" if r["from"] else f"{r['to']:,} (이전값 없음)"
         flip = (f" [전환: 직전 {r.get('prev_date', '')} {'상향' if r.get('prev_dir') == 'up' else '하향'}]"
@@ -785,6 +804,9 @@ def finalize(a, d):
                                           encoding="utf-8")
 
 
+SUM_VER = 2     # 의견 정리 형식 판. 올리면 정리된 종목 전부 다음 실행에 다시 정리 (2: 반등/하락 포인트 줄, 11-14 사용자)
+
+
 async def summarize(a, d, sem):
     dd = {"code": d["code"], "name": d["name"], "reports": d["win_reports"]}
     async with sem.slot(0):
@@ -797,6 +819,7 @@ async def summarize(a, d, sem):
     a["flip_seen"] = sorted(str(i) for i in flip_ids)          # 사유를 물어본 전환 (못 받아도 다시 묻지 않음)
     a["generated"] = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     a["needs_summary"] = False
+    a["sum_ver"] = SUM_VER
     a["sum_ids"] = sorted(r["id"] for r in d["win_reports"])   # 이 묶음으로 정리함 — 빠지거나 늘면 다시
     return set(r["broker"] for r in d["win_reports"]) - set(a["brokers"])
 
@@ -818,6 +841,8 @@ async def run_async(codes, force=False, deadline=None):
             a["needs_summary"] = True
         # 3개월 밖으로 빠진 리포트가 있으면 의견 정리도 다시 (11-12 사용자: 옛 리포트 내용이 남지 않게)
         win_ids = {r["id"] for r in d["win_reports"]}
+        if a.get("generated") and a.get("sum_ver", 1) < SUM_VER:
+            a["needs_summary"] = True
         if a.get("generated"):
             if "sum_ids" not in a:                       # 기록 전 정리분: 정리 시점 3개월 안이던 리포트가 지금 빠졌나로 판단
                 cut = (datetime.strptime(a["generated"][:10], "%Y-%m-%d") - timedelta(days=WINDOW_DAYS)).strftime("%Y-%m-%d")
