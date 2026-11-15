@@ -110,9 +110,9 @@
         </ol>
         <p class="rl-n">「리포트」 표시는 company-log에 증권사 리포트가 있는 종목이에요. 눌러서 종목 페이지로 갈 수 있어요.</p>
       </details>
-      <div class="feed-btns earn-prev" id="earnPrevBox" hidden><button type="button" class="feed-more" id="earnPrev">지난 주 보기</button></div>
+      <div class="feed-btns earn-next" id="earnNextBox" hidden><button type="button" class="feed-more" id="earnNext">다음 주 보기</button></div>
       <div id="earnList"></div>
-      <div class="feed-btns earn-next" id="earnNextBox" hidden><button type="button" class="feed-more" id="earnNext">다음 주 더 보기</button></div>
+      <div class="feed-btns earn-prev" id="earnPrevBox" hidden><button type="button" class="feed-more" id="earnPrev">지난 주 더 보기</button></div>
     </section>
   </div>
 
@@ -538,7 +538,7 @@ document.getElementById('sigSeg').addEventListener('click', e => {
 });
 
 // 실적 캘린더 (data/earnings.json — tools/earnings.py, 사용자 요청 10-28)
-// 처음엔 이번 주+다음 주, 위 버튼으로 지난 주를 한 주씩, 아래 버튼으로 그다음 주를 한 주씩
+// 처음엔 이번 주+다음 주(둘 다 비면 일정이 있는 가장 최근 주), 늦은 날이 위 (사용자 요청 11-15) — 위 버튼으로 그다음 주, 아래 버튼으로 지난 주를 한 주씩
 const eok = v => { if (v == null) return '-'; const a = Math.abs(v), s = v < 0 ? '-' : '';
   if (a >= 10000) { const j = Math.floor(a / 10000), r = Math.round(a % 10000); return `${s}${j}조${r ? ' ' + r.toLocaleString('ko-KR') + '억' : ''}`; }
   return `${s}${Math.round(a).toLocaleString('ko-KR')}억`; };
@@ -620,7 +620,7 @@ function renderEarn() {
   const box = document.getElementById('earnList');
   const wk = d => wkAgo(d) * -1;                        // 이번 주 0, 다음 주 1, 지난주 -1
   const all = earn.map(x => ({...x, w: wk(x.date)}));
-  const rows = byDayCap(all.filter(x => x.w >= earnFrom && x.w <= earnTo), x => x.date, true);
+  const rows = byDayCap(all.filter(x => x.w >= earnFrom && x.w <= earnTo), x => x.date);
   let html = '', day = '', w = null;
   rows.forEach(x => {
     if (x.w !== w) { w = x.w; const s = new Date(THIS_MON.getTime() + w * WEEK), e2 = new Date(s); e2.setDate(e2.getDate() + 6);
@@ -633,8 +633,8 @@ function renderEarn() {
   document.getElementById('earnPrevBox').hidden = !(all.length && minW < earnFrom);
   document.getElementById('earnNextBox').hidden = !(all.length && maxW > earnTo);
   const pw = all.filter(x => x.w === earnFrom - 1).length, nw = all.filter(x => x.w === earnTo + 1).length;
-  document.getElementById('earnPrev').textContent = `지난 주 보기${pw ? ` · ${pw}종목` : ''}`;
-  document.getElementById('earnNext').textContent = `다음 주 더 보기${nw ? ` · ${nw}종목` : ''}`;
+  document.getElementById('earnPrev').textContent = `지난 주 더 보기${pw ? ` · ${pw}종목` : ''}`;
+  document.getElementById('earnNext').textContent = `다음 주 보기${nw ? ` · ${nw}종목` : ''}`;
 }
 document.getElementById('earnPrev').onclick = () => { earnFrom--; renderEarn(); };
 document.getElementById('earnNext').onclick = () => { earnTo++; renderEarn(); };
@@ -645,6 +645,9 @@ fetch('data/earnings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : nul
   document.getElementById('earnSub').textContent = `스탁이지 실적발표 일정 · ${earn.length}종목 · 갱신 ${d.updated}`;
   const n = earn.filter(x => x.date === today).length;
   document.getElementById('tnEarn').textContent = n ? n : '';
+  // 이번 주·다음 주가 비었으면(실적 시즌 끝) 일정이 있는 가장 최근 주부터
+  const ws = earn.map(x => -wkAgo(x.date));
+  if (!ws.some(w => w >= 0 && w <= 1) && ws.some(w => w < 0)) earnFrom = Math.max(...ws.filter(w => w < 0));
   renderEarn();
 }).catch(() => {});
 
