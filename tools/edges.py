@@ -92,7 +92,10 @@ def main():
     except Exception as e:                      # 시총은 정렬·필터용 — 못 받아도 목록은 낸다
         print(f"시총 못 받음: {type(e).__name__}")
         caps = {}
-    inlog = {x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
+    if caps:                                    # 전 상장사 시총 — 첫 화면 각 메뉴의 '시총 순' 정렬용 (사용자 요청 11-15)
+        (DATA / "caps.json").write_text(json.dumps({"updated": now.strftime("%Y-%m-%d %H:%M"), "unit": "억원", "caps": caps},
+                                                   separators=(",", ":")), encoding="utf-8")
+    inlog ={x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
 
     items = []
     for c, b in ok.items():

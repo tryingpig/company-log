@@ -87,6 +87,7 @@
         <button type="button" data-v="op" aria-pressed="false">영업익 증가율</button>
         <button type="button" data-v="rev" aria-pressed="false">매출 증가율</button>
         <button type="button" data-v="lev" aria-pressed="false">이익 레버리지</button>
+        <button type="button" data-v="cap" aria-pressed="false">시총 순</button>
       </div>
       <p class="count" id="scrCount"></p>
       <div class="panel"><ol class="feed-list earn-list scr-list" id="scrList"></ol>
@@ -204,6 +205,7 @@
         <button type="button" data-v="gap" aria-pressed="false">목표가 괴리 큰 순</button>
         <button type="button" data-v="rel" aria-pressed="false">시장 대비 강한 순</button>
         <button type="button" data-v="cnt" aria-pressed="false">리포트 많은 순</button>
+        <button type="button" data-v="cap" aria-pressed="false">시총 순</button>
       </div>
     </div>
     <div class="chips" id="chips">
@@ -238,6 +240,10 @@ const sg = v => (v >= 0 ? '+' : '') + v.toFixed(1);
 const MK = {KOSPI: '코스피', KOSDAQ: '코스닥'};
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;   // 로컬 날짜(UTC로 밀리지 않게)
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
+// 전 상장사 시총(억원, data/caps.json — edges.py). 각 메뉴 '시총 순' · 날짜별 목록은 같은 날 안에서 시총 큰 순 (사용자 요청 11-15)
+let CAP = {};
+const capOf = c => CAP[c] || 0;
+const byDayCap = (rows, dk, asc) => rows.slice().sort((a, b) => (asc ? dk(a).localeCompare(dk(b)) : dk(b).localeCompare(dk(a))) || capOf(b.code) - capOf(a.code));
 // 의견 전환·거래량 신호 탭: 처음엔 이번 주(월요일부터)+지난주, '더 보기'마다 한 주씩 더 (사용자 요청 10-27)
 const WEEKS_FIRST = 2, WEEK = 7 * 864e5;
 const monday = s => { const x = new Date(s.slice(0, 10) + 'T00:00:00'); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
@@ -267,7 +273,7 @@ const F = {
   sig: s => !!s.sig5, sell: s => !!s.sell5,
   eup: s => s.edge?.s === 1, edn: s => s.edge?.s === -1,
 };
-const KEY = {recent: s => s.last_date, gap: s => s.gap ?? -1e9, rel: s => s.rel3 ?? -1e9, cnt: s => s.up3 + s.down3};
+const KEY = {recent: s => s.last_date, gap: s => s.gap ?? -1e9, rel: s => s.rel3 ?? -1e9, cnt: s => s.up3 + s.down3, cap: s => CAP[s.code] ?? -1};
 
 // AI 정리 상태: 날짜 / 대기
 function aiTxt(s) {
@@ -319,6 +325,7 @@ function rowHtml(s) {
       ${s.wmean ? `<span class="${hl('gap')}">가중 목표가 <b>${fmt(s.wmean)}</b> <span class="${s.gap >= 0 ? 'pos' : 'neg'}">(${sg(s.gap)}%)</span></span>` : '<span>가중 목표가 -</span>'}
     </span>
     ${relHtml(s, hl('rel'))}
+    ${sort === 'cap' ? `<span class="nums"><span class="sorted">시총 <b>${CAP[s.code] ? eok(CAP[s.code]) : '-'}</b></span></span>` : ''}
   </a></li>`;
 }
 
@@ -480,8 +487,8 @@ function sigSpark(rs) {
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="${p}" x2="${w - p}" y1="${y(100)}" y2="${y(100)}" stroke="var(--muted)" stroke-dasharray="2 2"/><polyline points="${rs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="1.6"/><circle cx="${x(rs.length - 1)}" cy="${y(last)}" r="2.2" fill="${col}"/></svg>`;
 }
 function renderSig() {
-  const rows = sigs.filter(f => !sigFirst || f.nth === 1);
-  document.getElementById('sigSub').textContent = `최근 1개월 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  const rows = byDayCap(sigs.filter(f => !sigFirst || f.nth === 1), f => f.date);
+  document.getElementById('sigSub').textContent = `최근 1개월 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순 · 같은 날은 시총 큰 순`;
   sigPage = weekPage(rows, sigWeeks);
   let html = '', day = '';
   sigPage.vis.forEach(f => {
@@ -503,8 +510,8 @@ document.getElementById('sigLess').onclick = () => { sigWeeks = WEEKS_FIRST; ren
 // 매도 우위 대량 거래
 let sells = [], sellTrend = false, sellWeeks = WEEKS_FIRST, sellPage = {};
 function renderSell() {
-  const rows = sells.filter(f => !sellTrend || f.trend);
-  document.getElementById('sellSub').textContent = `최근 1개월 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순`;
+  const rows = byDayCap(sells.filter(f => !sellTrend || f.trend), f => f.date);
+  document.getElementById('sellSub').textContent = `최근 1개월 · ${rows.length}건 · ${new Set(rows.map(f => f.code)).size}종목 · 최신순 · 같은 날은 시총 큰 순`;
   sellPage = weekPage(rows, sellWeeks);
   let html = '', day = '';
   sellPage.vis.forEach(f => {
@@ -613,7 +620,7 @@ function renderEarn() {
   const box = document.getElementById('earnList');
   const wk = d => wkAgo(d) * -1;                        // 이번 주 0, 다음 주 1, 지난주 -1
   const all = earn.map(x => ({...x, w: wk(x.date)}));
-  const rows = all.filter(x => x.w >= earnFrom && x.w <= earnTo);
+  const rows = byDayCap(all.filter(x => x.w >= earnFrom && x.w <= earnTo), x => x.date, true);
   let html = '', day = '', w = null;
   rows.forEach(x => {
     if (x.w !== w) { w = x.w; const s = new Date(THIS_MON.getTime() + w * WEEK), e2 = new Date(s); e2.setDate(e2.getDate() + 6);
@@ -714,7 +721,7 @@ function scrCard(x, last) {
       <span class="sv"><span class="k">매출</span>${pc(x.rev_yoy)}</span>
       <span class="sv"><span class="k">영업익</span>${pc(x.op_yoy)}</span>
       <span class="sv" title="${LEV_T}"><span class="k">이익 레버리지</span><b>${lv == null ? '-' : lv.toFixed(1) + '배'}</b></span>
-      <span class="sbs">${isNew(x) ? '<span class="sb new">새로</span>' : ''}${isUpd(x) ? `<span class="sb new">${x.was}→${x.src === '보고서' ? '확정치' : x.src}</span>` : ''}${x.s3?.ev && warnN(x.s3.ev) ? '<span class="sb no" title="5년 안에 횡령·배임·불성실공시·관리종목 공시가 있어요">⚠ 경고 공시</span>' : ''}${scrSortK !== 'date' && x.d ? `<span class="sd">${x.d.slice(5).replace('-', '.')}</span>` : ''}${badge}</span></summary>
+      <span class="sbs">${isNew(x) ? '<span class="sb new">새로</span>' : ''}${isUpd(x) ? `<span class="sb new">${x.was}→${x.src === '보고서' ? '확정치' : x.src}</span>` : ''}${x.s3?.ev && warnN(x.s3.ev) ? '<span class="sb no" title="5년 안에 횡령·배임·불성실공시·관리종목 공시가 있어요">⚠ 경고 공시</span>' : ''}${scrSortK !== 'date' && x.d ? `<span class="sd">${x.d.slice(5).replace('-', '.')}</span>` : ''}${scrSortK === 'cap' ? `<span class="sd">시총 ${CAP[x.code] ? eok(CAP[x.code]) : '-'}</span>` : ''}${badge}</span></summary>
     <div class="eb">
       <h3>1차 · 최근 분기 실적 <small>${x.src === '보고서' ? `DART 정기보고서 · ${x.fs}` : x.src === '네이버' ? '네이버 증권 분기 실적 (DART 보고서를 아직 못 받아 보강)' : `${x.via === 'DART' ? 'DART 잠정실적 공시 원문' : '스탁이지 잠정 실적'} · ${x.d.slice(5).replace('-', '.')}`}</small></h3>
       <div class="sc-tw"><table class="et"><thead><tr><th></th><th>이번 분기</th><th>YoY</th><th>QoQ</th></tr></thead><tbody>
@@ -751,7 +758,7 @@ function renderScr() {
   document.getElementById('scrFunnel').innerHTML = [[1, '1차', '실적 성장'], [2, '2차', '현금흐름·회전율'], [3, '3차 필수', '유증·CB·BW 없음']]
     .map(([s, a, b]) => `<button type="button" data-s="${s}" class="${s === scrStage ? 'on' : ''}" aria-pressed="${s === scrStage}"><b>${a}</b> ${n(s)}곳<small>${b}${s > 1 && Q.unchecked ? ` · 미확인 ${Q.unchecked}곳 빠짐` : ''}</small></button>`).join('<span class="fa" aria-hidden="true">→</span>');
   let rows = all.filter(x => stageOk(x, scrStage) && [...scrOn].every(f => SF[f](x)));
-  const K = {op: x => x.op_yoy === '흑자 전환' ? 1e9 : x.op_yoy, rev: x => x.rev_yoy, lev: x => lev(x) ?? (x.op_yoy === '흑자 전환' ? 1e9 : -1)};
+  const K = {op: x => x.op_yoy === '흑자 전환' ? 1e9 : x.op_yoy, rev: x => x.rev_yoy, lev: x => lev(x) ?? (x.op_yoy === '흑자 전환' ? 1e9 : -1), cap: x => CAP[x.code] ?? -1};
   rows = rows.slice().sort(scrSortK === 'date'
     ? (a, b) => (b.d || '').localeCompare(a.d || '') || K.op(b) - K.op(a)      // 공시일 최신순, 같은 날은 영업익 증가율
     : (a, b) => K[scrSortK](b) - K[scrSortK](a));
@@ -1002,8 +1009,8 @@ const DIRK = {up: '상향', down: '하향'};
 let flips = [], feedWeeks = WEEKS_FIRST, feedPage = {};
 function renderFeed() {
   document.getElementById('feedSub').textContent =
-    `최근 1개월 · ${flips.length}건 · ${new Set(flips.map(f => f.code)).size}종목 · 최신순`;
-  feedPage = weekPage(flips, feedWeeks);
+    `최근 1개월 · ${flips.length}건 · ${new Set(flips.map(f => f.code)).size}종목 · 최신순 · 같은 날은 시총 큰 순`;
+  feedPage = weekPage(byDayCap(flips, f => f.date.slice(0, 10)), feedWeeks);
   let html = '', day = '';
   feedPage.vis.forEach(f => {
     const d = f.date.slice(0, 10);
@@ -1030,6 +1037,16 @@ fetch('data/flips.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).
   const lastDay = flips[0]?.date.slice(0, 10);
   const n = flips.filter(f => f.date.slice(0, 10) === lastDay).length;
   document.getElementById('tnFlips').textContent = n ? n : '';
+}).catch(() => {});
+
+fetch('data/caps.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
+  if (!d?.caps) return;
+  CAP = d.caps;
+  if (stocks.length) render();
+  if (sigs.length || sells.length) { renderSig(); renderSell(); }
+  if (flips.length) renderFeed();
+  if (earn.length) renderEarn();
+  if (scr) renderScr();
 }).catch(() => {});
 
 fetch('data/index.json', {cache: 'no-cache'}).then(r => r.json()).then(d => {
