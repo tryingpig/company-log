@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116a">
+<link rel="stylesheet" href="assets/style.css?v=20261116b">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -323,7 +323,7 @@ function rowHtml(s) {
     <span class="last"><span class="tag ${s.last_dir}">${s.last_dir === 'up' ? '상향' : '하향'}</span>${esc(s.last_date.slice(5))} · ${esc(s.last_broker)} · 목표가 ${fmt(s.last_to)}원</span>
     <span class="nums">
       <span class="${hl('cnt')}">3개월 <span class="pos">▲${s.up3 ?? 0}</span> <span class="neg">▼${s.down3 ?? 0}</span> · 증권사 ${s.brokers3 ?? 0}곳</span>
-      ${s.wmean ? `<span class="${hl('gap')}">가중 목표가 <b>${fmt(s.wmean)}</b> <span class="${s.gap >= 0 ? 'pos' : 'neg'}">(${sg(s.gap)}%)</span></span>` : '<span>가중 목표가 -</span>'}
+      ${s.wmean ? `<span class="${hl('gap')}">가중 목표가 <b>${fmt(s.wmean)}</b> ${s.gap != null ? `<span class="${s.gap >= 0 ? 'pos' : 'neg'}">(${sg(s.gap)}%)</span>` : ''}</span>` : '<span>가중 목표가 -</span>'}
     </span>
     ${relHtml(s, hl('rel'))}
     ${sort === 'cap' ? `<span class="nums"><span class="sorted">시총 <b>${CAP[s.code] ? eok(CAP[s.code]) : '-'}</b></span></span>` : ''}
@@ -407,7 +407,9 @@ function edgeBadge(s) {
   const e = s.edge;
   if (!e) return '';
   const t = `${e.since.slice(5).replace('-', '.')}부터`;
-  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 네 선 모두 상승">▲ 매수 에지 ${e.run}일째</span>`
+  const rl = e.s === 1 && EDGE_RL[s.code];          // 재점등은 매수 에지 메뉴(edges.json) 계산 결과를 그대로
+  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 네 선 모두 상승">▲ 매수 에지 ${e.run}일째</span>` +
+                     (rl ? `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 ${rl.prev}일 켜짐 → ${rl.gap}일 쉼(앞 고점 대비 ${rl.dip.toFixed(1)}%, 60일선 위 유지) → 다시 켜짐">↻ 재점등</span>` : '')
                    : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 네 선 모두 하락">▼ 매도 에지 ${e.run}일째</span>`;
 }
 
@@ -946,6 +948,7 @@ const ES = {new: (a, b) => a.run - b.run || (b.cap || 0) - (a.cap || 0), cap: (a
 //   5) 지금 다시 켜져 있다 (x.run = 이번에 켜진 뒤 거래일 수)
 // 날짜 칸은 x.e(최근 62거래일 에지 '+'/'-'/'.'), 종가·60일선은 x.c(122거래일) 로 계산. dip = 앞 켜짐 구간 종가 고점 대비 쉼 동안 종가 저점
 const RL_PREV = 3, RL_GAP = [2, 5];
+let EDGE_RL = {};                                   // {code: 재점등 정보} — 종목 목록 칩용
 function relit(x) {
   const e = x.e, c = x.c, pre = e.slice(0, e.length - x.run), m = pre.match(/(\++)([^+]*)$/);
   if (!m) return null;
@@ -1023,7 +1026,8 @@ document.getElementById('edgeChips').addEventListener('click', e => {
 document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; renderEdge(); };
 fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   if (!d) return;
-  edges = d.items || []; edges.forEach(x => { x.rl = relit(x); });
+  edges = d.items || []; edges.forEach(x => { x.rl = relit(x); if (x.rl) EDGE_RL[x.code] = x.rl; });
+  if (stocks.length && Object.keys(EDGE_RL).length) render();
   edgeFrom = prevMonday(d.d);
   const today = edges.filter(x => x.run === 1 && edgeBig(x)).length;
   document.getElementById('edgeSub').textContent = `${d.d.slice(5).replace('-', '.')} 종가 기준 · 전 상장사 ${d.universe.toLocaleString()}종목 중 ${edges.length}종목 · ${d.updated.slice(5).replace('-', '.')} 계산`;
