@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261114a">
+<link rel="stylesheet" href="assets/style.css?v=20261116a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -171,7 +171,7 @@
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
           <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
         </ol>
-        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 2~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 하루만 꺼졌다 켜진 건 깜빡임이라 빼고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
         <button type="button" data-v="new" class="on" aria-pressed="true">지난주부터 켜짐 <span id="nEdgeNew"></span></button>
@@ -188,6 +188,7 @@
         <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
         <button type="button" class="chip" data-f="cap1t" aria-pressed="false">시총 1조↑</button>
         <button type="button" class="chip" data-f="small" aria-pressed="false">시총 5,000억 이하</button>
+        <button type="button" class="chip" data-f="relit" aria-pressed="false" title="앞서 3거래일 이상 켜졌다가 2~5거래일 쉬는 동안 매도 에지 없이 종가가 60일선 위를 지키고 다시 켜진 종목">↻ 재점등만</button>
         <button type="button" class="chip" data-f="nolog" aria-pressed="false">리포트 로그에 없는 종목만</button>
       </div>
       <p class="mut" id="edgeCount"></p>
@@ -933,9 +934,29 @@ let edges = [], edgeRange = 'new', edgeSort = 'new', edgeF = new Set(), edgeShow
 // 시총 5,000억 이하는 기본 화면에서 숨기고 「시총 5,000억 이하」 칩을 눌렀을 때만 (사용자 요청 11-11, 시총 모르면 이하로 본다)
 const EDGE_SMALL = 5000, edgeBig = x => (x.cap || 0) > EDGE_SMALL;
 const EF = {KOSPI: x => x.market === 'KOSPI', KOSDAQ: x => x.market === 'KOSDAQ', cap1t: x => (x.cap || 0) >= 10000,
-  small: x => !edgeBig(x), nolog: x => !x.inlog};
+  small: x => !edgeBig(x), nolog: x => !x.inlog, relit: x => !!x.rl};
 const ES = {new: (a, b) => a.run - b.run || (b.cap || 0) - (a.cap || 0), cap: (a, b) => (b.cap || 0) - (a.cap || 0),
   chg: (a, b) => b.chg - a.chg, tv: (a, b) => b.tv - a.tv};
+// 재점등(사용자 요청 11-16) — 우상향 중 잠깐 쉬었다 다시 켜진 매수 에지. 아래를 모두 만족:
+//   1) 직전 매수 에지가 3거래일 이상 이어졌다 (RL_PREV)
+//   2) 그 뒤 2~5거래일 꺼져 있었다 (RL_GAP — 1거래일은 이평선 하나가 잠깐 평평해진 깜빡임이라 제외,
+//      5거래일(1주)보다 길면 앞 상승과 이어진 흐름으로 보지 않고 새로 켜진 것으로 본다. 11-13 기준 쉼은 대부분 1주 안)
+//   3) 쉬는 동안 매도 에지('-')가 한 번도 없었다
+//   4) 쉬는 동안 종가가 매일 60일선 위였다
+//   5) 지금 다시 켜져 있다 (x.run = 이번에 켜진 뒤 거래일 수)
+// 날짜 칸은 x.e(최근 62거래일 에지 '+'/'-'/'.'), 종가·60일선은 x.c(122거래일) 로 계산. dip = 앞 켜짐 구간 종가 고점 대비 쉼 동안 종가 저점
+const RL_PREV = 3, RL_GAP = [2, 5];
+function relit(x) {
+  const e = x.e, c = x.c, pre = e.slice(0, e.length - x.run), m = pre.match(/(\++)([^+]*)$/);
+  if (!m) return null;
+  const prev = m[1].length, gap = m[2].length;
+  if (prev < RL_PREV || gap < RL_GAP[0] || gap > RL_GAP[1] || m[2].includes('-')) return null;
+  const off = c.length - e.length, g0 = off + pre.length - gap;
+  const ma60 = i => c.slice(i - 59, i + 1).reduce((s, v) => s + v, 0) / 60;
+  for (let i = g0; i < g0 + gap; i++) if (i < 59 || c[i] <= ma60(i)) return null;
+  const hi = Math.max(...c.slice(g0 - prev, g0)), lo = Math.min(...c.slice(g0, g0 + gap));
+  return {prev, gap, dip: (lo / hi - 1) * 100, g0: pre.length - gap};
+}
 function edgeSvg(x) {
   const W = 300, H = 84, B = 6, n = x.e.length, c = x.c, off = c.length - n;
   const ma = k => c.map((_, i) => i < k - 1 ? null : c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k).slice(off);
@@ -950,8 +971,10 @@ function edgeSvg(x) {
   [...x.e].forEach((s, i) => { if (s !== '+') return; const r = runs[runs.length - 1]; if (r && r[1] === i - 1) r[1] = i; else runs.push([i, i]); });
   const shade = runs.map(([a, b]) => `<rect x="${(a * bw).toFixed(1)}" y="0" width="${((b - a + 1) * bw).toFixed(1)}" height="${H}" fill="var(--up)" opacity=".1"/>`).join('');
   const band = [...x.e].map((s, i) => s === '.' ? '' : `<rect x="${(i * bw).toFixed(1)}" y="${H + 3}" width="${(bw + 0.3).toFixed(1)}" height="${B}" fill="var(${s === '+' ? '--up' : '--down'})"/>`).join('');
+  // 재점등이면 쉬었던 구간을 점선 박스로
+  const rest = x.rl ? `<rect x="${(x.rl.g0 * bw).toFixed(1)}" y="0" width="${(x.rl.gap * bw).toFixed(1)}" height="${H}" fill="none" stroke="var(--up)" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>` : '';
   return `<svg viewBox="0 0 ${W} ${H + B + 3}" preserveAspectRatio="none" role="img" aria-label="${esc(x.name)} 최근 3개월 종가와 이동평균선">
-    ${shade}${lines.map(([a, col, w]) => `<polyline fill="none" stroke="var(${col})" stroke-width="${w}" vector-effect="non-scaling-stroke" points="${path(a)}"/>`).join('')}
+    ${shade}${rest}${lines.map(([a, col, w]) => `<polyline fill="none" stroke="var(${col})" stroke-width="${w}" vector-effect="non-scaling-stroke" points="${path(a)}"/>`).join('')}
     <rect x="0" y="${H + 3}" width="${W}" height="${B}" fill="var(--line)"/>${band}</svg>`;
 }
 // 켜진 날 '11.11 (수)' — D+n 은 켜진 날을 1로 센 거래일 수
@@ -966,15 +989,16 @@ function renderEdge() {
   document.getElementById('edgeCount').textContent = `${rows.length}종목` + (hid ? ` · 시총 5,000억 이하 ${hid}종목은 숨김` : '');
   const vis = rows.slice(0, edgeShow);
   // 새로 켜진 순: 켜진 날마다 제목 줄(날짜 · D+n · 종목 수) — 그 안은 시총 큰 순 (사용자 요청 11-11)
-  const nRun = {}; rows.forEach(x => { nRun[x.run] = (nRun[x.run] || 0) + 1; });
+  const nRun = {}, nRl = {}; rows.forEach(x => { nRun[x.run] = (nRun[x.run] || 0) + 1; if (x.rl) nRl[x.run] = (nRl[x.run] || 0) + 1; });
   document.getElementById('edgeList').innerHTML = vis.map((x, i) => {
     const gh = edgeSort === 'new' && (i === 0 || vis[i - 1].run !== x.run)
-      ? `<li class="edge-gh"><b>${edgeDay(x.since)} 켜짐</b> <span class="edgec up">D+${x.run}</span> <span class="mut">${nRun[x.run]}종목 · 시총 큰 순</span></li>` : '';
+      ? `<li class="edge-gh"><b>${edgeDay(x.since)} 켜짐</b> <span class="edgec up">D+${x.run}</span> <span class="mut">${nRun[x.run]}종목${nRl[x.run] ? ` · 재점등 ${nRl[x.run]}` : ''} · 시총 큰 순</span></li>` : '';
     // 전부 종목 페이지로 — 리포트 로그에 없는 종목은 차트만 보는 페이지(data/charts, 사용자 요청 11-11)
     const [o, cl] = [`<a class="edge-card" href="stock.html?code=${x.code}">`, '</a>'];
     return `${gh}<li>${o}
       <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 종목 페이지에 리포트까지 나와요">리포트</small>' : ''}</span>
         <span class="edgec up" title="${x.run}거래일째 켜져 있음">${edgeDay(x.since)} D+${x.run}</span></span>
+      ${x.rl ? `<span class="edge-rl"><span class="edgec relit">↻ 재점등</span> 앞서 <b>${x.rl.prev}일</b> 켜짐 → <b>${x.rl.gap}일</b> 쉼 (앞 고점 대비 <b>${x.rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>` : ''}
       <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small title="최근 20거래일 하루 평균">거래대금 20일 평균</small>${eok(x.tv)}</span></span>
       ${edgeSvg(x)}${cl}</li>`;
   }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
@@ -999,7 +1023,7 @@ document.getElementById('edgeChips').addEventListener('click', e => {
 document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; renderEdge(); };
 fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   if (!d) return;
-  edges = d.items || [];
+  edges = d.items || []; edges.forEach(x => { x.rl = relit(x); });
   edgeFrom = prevMonday(d.d);
   const today = edges.filter(x => x.run === 1 && edgeBig(x)).length;
   document.getElementById('edgeSub').textContent = `${d.d.slice(5).replace('-', '.')} 종가 기준 · 전 상장사 ${d.universe.toLocaleString()}종목 중 ${edges.length}종목 · ${d.updated.slice(5).replace('-', '.')} 계산`;
