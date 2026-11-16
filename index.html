@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116b">
+<link rel="stylesheet" href="assets/style.css?v=20261116c">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -171,7 +171,7 @@
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
           <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
         </ol>
-        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 2~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 하루만 꺼졌다 켜진 건 깜빡임이라 빼고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 옅은 파랑 배경과 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 2~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 하루만 꺼졌다 켜진 건 깜빡임이라 빼고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
         <button type="button" data-v="new" class="on" aria-pressed="true">지난주부터 켜짐 <span id="nEdgeNew"></span></button>
@@ -969,10 +969,10 @@ function edgeSvg(x) {
   const X = i => (i / (n - 1) * W).toFixed(1), Y = v => (2 + (1 - (v - lo) / sp) * (H - 4)).toFixed(1);
   const path = a => a.map((v, i) => v == null ? '' : `${X(i)},${Y(v)}`).filter(Boolean).join(' ');
   const bw = W / n;
-  // 매수 에지였던 구간은 차트 배경에도 옅게 (이어진 날은 한 칸으로)
+  // 매수 에지였던 구간은 옅은 빨강, 매도 에지였던 구간은 옅은 파랑 배경 (이어진 날은 한 칸으로, 파랑은 사용자 요청 11-16)
   const runs = [];
-  [...x.e].forEach((s, i) => { if (s !== '+') return; const r = runs[runs.length - 1]; if (r && r[1] === i - 1) r[1] = i; else runs.push([i, i]); });
-  const shade = runs.map(([a, b]) => `<rect x="${(a * bw).toFixed(1)}" y="0" width="${((b - a + 1) * bw).toFixed(1)}" height="${H}" fill="var(--up)" opacity=".1"/>`).join('');
+  [...x.e].forEach((s, i) => { if (s === '.') return; const r = runs[runs.length - 1]; if (r && r[1] === i - 1 && r[2] === s) r[1] = i; else runs.push([i, i, s]); });
+  const shade = runs.map(([a, b, s]) => `<rect x="${(a * bw).toFixed(1)}" y="0" width="${((b - a + 1) * bw).toFixed(1)}" height="${H}" fill="var(${s === '+' ? '--up' : '--down'})" opacity=".1"/>`).join('');
   const band = [...x.e].map((s, i) => s === '.' ? '' : `<rect x="${(i * bw).toFixed(1)}" y="${H + 3}" width="${(bw + 0.3).toFixed(1)}" height="${B}" fill="var(${s === '+' ? '--up' : '--down'})"/>`).join('');
   // 재점등이면 쉬었던 구간을 점선 박스로
   const rest = x.rl ? `<rect x="${(x.rl.g0 * bw).toFixed(1)}" y="0" width="${(x.rl.gap * bw).toFixed(1)}" height="${H}" fill="none" stroke="var(--up)" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>` : '';

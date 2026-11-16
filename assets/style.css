@@ -386,6 +386,9 @@ details.more summary { cursor: pointer; color: var(--text-2); font-size: 13px; m
 .rv-row { cursor: default; }
 .bb-tog { font: inherit; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; cursor: pointer; }
 .bb-tog.on { color: var(--text-2); border-color: var(--bb); }
+.ebg-tog.on { border-color: var(--up); }
+.legend .sw.ebg { width: 12px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--up) 30%, transparent) 50%, color-mix(in srgb, var(--down) 30%, transparent) 50%); }
+.edge-bg[hidden] { display: none; }
 .legend .sw.dash { background: repeating-linear-gradient(90deg, var(--bb) 0 3px, transparent 3px 5px); }
 .rv-row.old { opacity: .5; }
 .pending { margin: 0 0 14px; padding: 8px 12px; border-radius: 8px; border: 1px dashed var(--line); color: var(--text-2); font-size: 13px; }
