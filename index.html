@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116f">
+<link rel="stylesheet" href="assets/style.css?v=20261116g">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -761,6 +761,11 @@ function qfBal(el, cats, cols) {                                // 재무상태 
   });
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${s}</svg>`;
 }
+// 차트 아래 숫자 표 (사용자 요청 11-16 — 막대만으론 값이 바로 안 읽힘). 가로로 넘치면 표만 옆으로 밀림
+function qfTbl(cols, ser) {
+  return `<div class="qf-tw"><table class="qf-tb"><thead><tr><th></th>${cols.map(c => `<th${c.pre ? ' class="pre"' : ''}>${c.l}</th>`).join('')}</tr></thead>
+    <tbody>${ser.map(sr => `<tr><th>${sr.l}</th>${sr.v.map((v, j) => `<td${cols[j].pre ? ' class="pre"' : ''}>${v == null ? '<span class="mut">-</span>' : sr.f(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
 function qfRender(body, d, x) {
   const rows = d.q.map(r => ({...r}));
   const cur = rows.find(r => r.p === x.period), res = x.result;
@@ -804,7 +809,13 @@ function qfRender(body, d, x) {
     .map(([k, l]) => ({l, v: balAt.map(r => r ? r[k] ?? null : null)})).filter(cc => cc.v.some(v => v != null)) : [];
   const cols = balAt.map((r, j) => ({l: r ? qLab(r.p) : '-', op: [.3, .6, 1][j]}));
   const fsMix = new Set(rows.filter(r => r.fs).map(r => r.fs)).size > 1;
-  const fig = (cap, k, sub = '', wide = false, lg = '') => `<figure class="ca-fig${wide ? ' wide' : ''}"><figcaption>${cap}${sub ? ` <span class="mut">${sub}</span>` : ''}</figcaption>${lg}<div class="ca-c" data-k="${k}"></div></figure>`;
+  const qc = rows.map(r => ({l: qLab(r.p) + (r.pre ? ' 잠정' : ''), pre: r.pre})), pf = v => v.toFixed(1) + '%';
+  const qt = (...ks) => qfTbl(qc, ks.map(([k, l, f = f0]) => ({l, f, v: rows.map(r => r[k] ?? null)})));
+  const T = {ro: qt(['rev', '매출'], ['op', '영업이익']), mg: qt(['gpm', 'GPM', pf], ['opm', 'OPM', pf]), cs: qt(['cr', '매출원가율', pf], ['sr', '판관비율', pf]),
+    gs: qt(['gp', '매출총이익'], ['sga', '판관비']), iv: qt(['inv', '재고자산']),
+    br: bridge ? `<div class="qf-tw"><table class="qf-tb qf-tb-v"><tbody>${bridge.map(b => `<tr><th>${b.l.join(' ')}</th><td${b.tot ? ' class="tot"' : ''}>${b.tot ? f0(b.v) : (b.v > 0 ? '+' : '') + f0(b.v)}억</td></tr>`).join('')}</tbody></table></div>` : '',
+    bs: cats.length ? qfTbl(cols, cats.map(cc => ({l: cc.l, f: f0, v: cc.v}))) : ''};
+  const fig = (cap, k, sub = '', wide = false, lg = '') => `<figure class="ca-fig${wide ? ' wide' : ''}"><figcaption>${cap}${sub ? ` <span class="mut">${sub}</span>` : ''}</figcaption>${lg}<div class="ca-c" data-k="${k}"></div>${T[k] || ''}</figure>`;
   body.innerHTML = `<p class="qf-h">${qLab(L.p)}${L.pre ? ' 잠정' : ''} · ${d.fs === 'OFS' ? '별도' : '연결'} · 억원</p>
     <div class="qf-tiles">${tiles.join('')}</div>${tiles2.length ? `${C !== L ? `<p class="qf-h">재고·현금흐름·차입금은 ${qLab(C.p)} 분기보고서 기준 (이번 분기 보고서 전)</p>` : ''}<div class="qf-tiles">${tiles2.join('')}</div>` : ''}
     <div class="ca-charts">
@@ -830,6 +841,7 @@ function qfRender(body, d, x) {
   });
   draw();
   body._draw = draw;
+  requestAnimationFrame(() => body.querySelectorAll('.qf-tw').forEach(w => { w.scrollLeft = w.scrollWidth; }));   // 좁은 화면에선 최신 분기부터 보이게
 }
 document.getElementById('earnList').addEventListener('click', ev => {
   const more = ev.target.closest('.qf-more button');

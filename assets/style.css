@@ -854,3 +854,13 @@ a.edge-card:hover { border-color: var(--accent); }
 
 /* 실적 캘린더 검색 (사용자 요청 11-16) */
 .earn-tb { margin: 4px 0 10px; }
+/* 상세 실적 차트 아래 숫자 표 (11-16) */
+.qf-tw { overflow-x: auto; margin: 6px 0 4px; }
+.qf-tb { border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 100%; }
+.qf-tb th, .qf-tb td { padding: 3px 6px; text-align: right; border-top: 1px solid var(--line); }
+.qf-tb thead th { color: var(--muted); font-weight: 400; border-top: 0; }
+.qf-tb tbody th { text-align: left; color: var(--text-2); font-weight: 400; position: sticky; left: 0; background: var(--surface); }
+.qf-tb td:last-child { font-weight: 700; }
+.qf-tb .pre { color: var(--muted); font-style: italic; }
+.qf-tb-v { min-width: 0; }
+.qf-tb-v td:last-child { font-weight: 400; } .qf-tb-v td.tot { font-weight: 700; }
