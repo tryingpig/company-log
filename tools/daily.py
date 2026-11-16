@@ -184,9 +184,9 @@ def run_company():
 
 async def main_async():
     t0 = time.time()
-    no_price = LIGHT and datetime.now(an.KST).strftime("%H:%M") < "09:00"     # 장 시작 전: 전날 확정 일봉 그대로
-    log("build 시작" + (" (가벼운 실행" + (", 일봉 안 받음" if no_price else "") + ")" if LIGHT else ""))
-    r = subprocess.run([PY39, str(ROOT / "tools" / "build.py")] + (["--no-price"] if no_price else []),
+    # 08:30 가벼운 실행도 일봉을 받는다 — 장 전이면 build.py 가 오늘 봉을 버려 전날 확정 일봉만 남는다 (사용자 요청 11-16)
+    log("build 시작" + (" (가벼운 실행)" if LIGHT else ""))
+    r = subprocess.run([PY39, str(ROOT / "tools" / "build.py")],
                        cwd=ROOT, capture_output=True)
     out = (r.stdout + r.stderr).decode("utf-8", errors="replace")     # PYTHONUTF8=1 로 실행되므로 utf-8
     for ln in out.strip().splitlines()[-6:]:

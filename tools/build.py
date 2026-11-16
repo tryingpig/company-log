@@ -146,6 +146,16 @@ def current_name(code):
 MARKETS = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
 
 
+def pre_open(rows):
+    """장 시작(09:00) 전이면 오늘 날짜 봉은 버린다 — 08:30 실행도 일봉을 받되(새 종목 종가 비지 않게, 사용자 요청 11-16)
+    장 전 잠정 봉이 섞이지 않게 전날까지 확정 봉만 쓴다."""
+    now = datetime.now(KST)
+    if now.strftime("%H:%M") >= "09:00":
+        return rows
+    today = now.strftime("%Y-%m-%d")
+    return [r for r in rows if r["d"] != today]
+
+
 def fetch_index(sym):
     """시장 지수 일봉 종가(소수점 유지). 실패하면 None."""
     for attempt in range(3):
@@ -159,6 +169,7 @@ def fetch_index(sym):
                 p = s.split("|")
                 if len(p) == 6 and p[0].isdigit() and float(p[4]) > 0:
                     rows.append({"d": f"{p[0][:4]}-{p[0][4:6]}-{p[0][6:]}", "c": round(float(p[4]), 2)})
+            rows = pre_open(rows)
             if rows:
                 return rows
         except Exception:
@@ -183,7 +194,7 @@ def fetch_bars(code):
                     if c <= 0:          # 거래정지일은 0으로 옴
                         continue
                     rows.append({"d": f"{d[:4]}-{d[4:6]}-{d[6:]}", "o": o, "h": h, "l": l, "c": c, "v": v})
-            return rows
+            return pre_open(rows)
         except Exception:
             time.sleep(0.5 * (attempt + 1))
     return None
