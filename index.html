@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116d">
+<link rel="stylesheet" href="assets/style.css?v=20261116e">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -110,6 +110,7 @@
         </ol>
         <p class="rl-n">「리포트」 표시는 company-log에 증권사 리포트가 있는 종목이에요. 눌러서 종목 페이지로 갈 수 있어요.</p>
       </details>
+      <div class="toolbar earn-tb"><input id="earnQ" type="search" placeholder="종목명 또는 코드 검색 — 지난 발표·분기보고서만 낸 종목까지" autocomplete="off" aria-label="실적 캘린더 종목 검색"></div>
       <div class="feed-btns earn-next" id="earnNextBox" hidden><button type="button" class="feed-more" id="earnNext">다음 주 보기</button></div>
       <div id="earnList"></div>
       <div class="feed-btns earn-prev" id="earnPrevBox" hidden><button type="button" class="feed-more" id="earnPrev">지난 주 더 보기</button></div>
@@ -551,7 +552,7 @@ const eokN = s => { const m = String(s ?? '').replace(/\s/g, '').match(/^(-)?(?:
 const pc = (v, u = '%') => v == null || Number.isNaN(v) ? '<span class="mut">-</span>'
   : typeof v === 'string' ? `<b class="${/흑자|축소/.test(v) ? 'pos' : 'neg'}">${v}</b>`      // 적자가 끼면 말로 (earnings.py growth)
   : `<b class="${v >= 0 ? 'pos' : 'neg'}">${sg(v)}${u}</b>`;
-let earn = [], earnFrom = -0, earnTo = 1, earnDayOpen = new Set();
+let earn = [], earnFrom = -0, earnTo = 1, earnDayOpen = new Set(), earnQ = '';
 const REP_SHOW = 30;              // 이번 주 = 0, 지난주 = -1, 다음 주 = 1
 function earnCard(x) {
   const today = ymd(new Date()), done = x.date <= today, r = x.result, e = x.est, p = x.price || {};
@@ -635,27 +636,32 @@ function renderEarn() {
   const box = document.getElementById('earnList');
   const wk = d => wkAgo(d) * -1;                        // 이번 주 0, 다음 주 1, 지난주 -1
   const all = earn.map(x => ({...x, w: wk(x.date)}));
-  const rows = byDayCap(all.filter(x => x.w >= earnFrom && x.w <= earnTo), x => x.date);
+  // 검색 중엔 주 범위·「더 보기」 접기 없이 전체 기간에서 찾는다 (사용자 요청 11-16)
+  const qq = earnQ.replace(/\s/g, '').toLowerCase();
+  const hit = x => x.name.replace(/\s/g, '').toLowerCase().includes(qq) || x.code.includes(qq);
+  const rows = byDayCap(all.filter(x => qq ? hit(x) : x.w >= earnFrom && x.w <= earnTo), x => x.date);
   let html = '', day = '', w = null, nrep = 0, more = 0;
   const flush = () => { if (more) html += `<li class="qf-more"><button type="button" data-day="${day}">분기보고서만 낸 종목 ${more}곳 더 보기</button></li>`; more = 0; };
   rows.forEach(x => {
     if (x.w !== w) { flush(); w = x.w; const s = new Date(THIS_MON.getTime() + w * WEEK), e2 = new Date(s); e2.setDate(e2.getDate() + 6);
-      html += `${html ? '</ol></div>' : ''}<h3 class="ew">${w === 0 ? '이번 주' : w === 1 ? '다음 주' : w === -1 ? '지난주' : w > 0 ? `${w}주 뒤` : `${-w}주 전`} <span>${mdd(s)}~${mdd(e2)} · ${all.filter(y => y.w === w).length}종목</span></h3><div class="panel"><ol class="feed-list earn-list">`; day = ''; }
+      html += `${html ? '</ol></div>' : ''}<h3 class="ew">${w === 0 ? '이번 주' : w === 1 ? '다음 주' : w === -1 ? '지난주' : w > 0 ? `${w}주 뒤` : `${-w}주 전`} <span>${mdd(s)}~${mdd(e2)} · ${qq ? rows.filter(y => y.w === w).length + '종목 검색됨' : all.filter(y => y.w === w).length + '종목'}</span></h3><div class="panel"><ol class="feed-list earn-list">`; day = ''; }
     if (x.date !== day) { flush(); day = x.date; nrep = 0; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})${day === ymd(new Date()) ? ' · 오늘' : ''}</li>`; }
     // 분기보고서만 낸 종목은 마감일에 1,000곳 넘게 몰려서 그날 시총 큰 순 REP_SHOW곳까지만 펼침 (사용자 결정 11-16)
-    if (x.rep && ++nrep > REP_SHOW && !earnDayOpen.has(day)) { more++; return; }
+    if (!qq && x.rep && ++nrep > REP_SHOW && !earnDayOpen.has(day)) { more++; return; }
     html += earnCard(x);
   });
   flush();
-  box.innerHTML = html ? html + '</ol></div>' : '<div class="panel"><p class="empty">이 기간에 잡힌 실적 발표 일정이 없어요</p></div>';
+  box.innerHTML = html ? html + '</ol></div>' : `<div class="panel"><p class="empty">${qq ? `「${esc(earnQ)}」 — 최근 4주 실적 발표·분기보고서에 없는 종목이에요` : '이 기간에 잡힌 실적 발표 일정이 없어요'}</p></div>`;
+  if (qq && rows.length === 1) box.querySelector('.ecard').open = true;    // 검색해서 하나만 남으면 바로 펼침
   const minW = Math.min(...all.map(x => x.w)), maxW = Math.max(...all.map(x => x.w));
-  document.getElementById('earnPrevBox').hidden = !(all.length && minW < earnFrom);
-  document.getElementById('earnNextBox').hidden = !(all.length && maxW > earnTo);
+  document.getElementById('earnPrevBox').hidden = !!qq || !(all.length && minW < earnFrom);
+  document.getElementById('earnNextBox').hidden = !!qq || !(all.length && maxW > earnTo);
   const pw = all.filter(x => x.w === earnFrom - 1).length, nw = all.filter(x => x.w === earnTo + 1).length;
   document.getElementById('earnPrev').textContent = `지난 주 더 보기${pw ? ` · ${pw}종목` : ''}`;
   document.getElementById('earnNext').textContent = `다음 주 보기${nw ? ` · ${nw}종목` : ''}`;
 }
 document.getElementById('earnPrev').onclick = () => { earnFrom--; renderEarn(); };
+document.getElementById('earnQ').addEventListener('input', ev => { earnQ = ev.target.value.trim(); renderEarn(); });
 document.getElementById('earnNext').onclick = () => { earnTo++; renderEarn(); };
 
 // 실적 캘린더 「상세 실적」 (사용자 요청 11-16, 샘플 '실적 퀵 분석' 구성) — data/qfin/{code}.json (tools/qfin.py, DART 분기 재무제표).
