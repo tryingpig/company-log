@@ -306,27 +306,151 @@ def price(bars, mc, d0):
 QFIN = DATA / "qfin"     # qfin.py 가 쓰는 종목별 「상세 실적」 (11개 분기)
 
 
-def add_conf(items, start):
+def qend(y, q):
+    return date(y, q * 3, 30 if q in (2, 3) else 31)
+
+
+def due_date(y, q):
+    """정기보고서 법정 제출 마감일: 분기·반기 = 분기말 + 45일, 사업보고서 = 결산일 + 90일. 주말이면 다음 월요일.
+    (공휴일은 안 따진다 — 3.31·5.15·8.14·11.14 무렵은 공휴일과 겹치는 해가 드물다)"""
+    d = qend(y, q) + timedelta(days=90 if q == 4 else 45)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+
+def prev_q(y, q):
+    return (y, q - 1) if q > 1 else (y - 1, 4)
+
+
+def rep_result(x):
+    """분기보고서 확정 값 → 잠정 실적과 같은 모양의 result (kind=regular). 전년·전분기는 네이버 지난 분기(past) 기준,
+    예상 대비는 제출 전 기록한 네이버 추정치. 사업보고서(4Q)는 연간 값이라 네이버 1~3Q 를 빼서 4Q 로 만든다."""
+    c = x.get("conf")
+    if not c or c.get("ccy") != "KRW":
+        return None
+    y, q = int(x["period"][:4]), int(x["period"][5])
+    past = {p["p"]: p for p in x.get("past") or []}
+    py, pq = prev_q(y, q)
+    ya, qa = past.get(f"{y - 1}.{q}Q") or {}, past.get(f"{py}.{pq}Q") or {}
+    cur = {k: c.get(k) for k in ("rev", "op", "net")}
+    if q == 4:
+        q123 = [past.get(f"{y}.{i}Q") for i in (1, 2, 3)]
+        if not all(q123):
+            return None
+        cur = {k: None if v is None or any(p.get(k) is None for p in q123) else round(v - sum(p[k] for p in q123), 1)
+               for k, v in cur.items()}
+    d = {k: {"cur": cur[k], "prev": qa.get(k), "yago": ya.get(k)} for k in cur}
+    return {**dart_result(d, c["rc"], x.get("est")), "kind": "regular"}
+
+
+def add_conf(items, start, today=None):
     """잠정 발표는 그대로 두고, 그 분기 분기보고서(DART)가 나왔으면 확정 값을 conf 로 덧붙인다 (사용자 결정 11-11).
-    잠정 없이 분기보고서만 낸 종목도 접수일에 rep=True 로 넣는다 (사용자 요청 11-16 — 전 상장사 실적 리뷰)."""
+    잠정 없이 분기보고서만 내는 종목도 rep=True 로 넣는다 (사용자 요청 11-16 — 전 상장사 실적 리뷰):
+      · 냈으면 접수일에, 아직이면 법정 마감일에 (due). 직전 분기 보고서를 그 분기 안에 낸 회사만 '낼 회사'로 본다
+        (3월 결산 등은 직전 분기 보고서가 늦게 잡혀서 빠진다).
+      · 마감일이 지났는데 없으면 late (미제출 — 화면에 빨간색, 사용자 결정 11-16). 마감일 다음 날 이후에
+        screen.py 가 한 번 더 돌아 confirmed.json 이 그날 뒤에 쓰였을 때만 판정한다(마감일 밤 접수분 오판 방지).
+    네이버 추정치·지난 분기·주가(est·past·price)는 enrich_rep 이 채우고, 여기선 이전 값을 이어 받는다."""
+    today = today or datetime.now(KST).date()
     conf = json.loads(CONF.read_text(encoding="utf-8")) if CONF.exists() else {}
+    cdate = datetime.fromtimestamp(CONF.stat().st_mtime, KST).date() if CONF.exists() else today
+    old = {(x["code"], x["period"]): x for x in items if x.get("rep")}
     items[:] = [x for x in items if not x.get("rep")]
     have = {(x["code"], x["period"]) for x in items}
     uni = json.loads(build.UNIVERSE.read_text(encoding="utf-8")) if build.UNIVERSE.exists() else {}
     inlog = {x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
+    ok = lambda code: code in uni and code[-1] == "0" and "스팩" not in uni[code]["name"]  # noqa: E731
+
+    def add(code, per, d, **kw):
+        row = {"code": code, "name": uni[code]["name"], "market": MKT.get(uni[code].get("market"), uni[code].get("market") or "KOSPI"),
+               "date": d, "src": "분기보고서", "period": per, "inlog": code in inlog, "rep": True, **kw}
+        o = old.get((code, per)) or {}
+        row.update({k: o[k] for k in ("est", "past", "price") if k in o})
+        if o.get("date") == d and "_pf" in o:          # 마감일 → 접수일로 옮겨 가면 발표일 반응을 다시 계산
+            row["_pf"] = o["_pf"]
+        items.append(row)
+
     for k, c in conf.items():
         code, per = k.split("|")
-        if (code, per) in have or c["d"] < start or code not in uni or code[-1] != "0" or "스팩" in uni[code]["name"]:
-            continue
-        items.append({"code": code, "name": uni[code]["name"], "market": MKT.get(uni[code].get("market"), uni[code].get("market") or "KOSPI"),
-                      "date": c["d"], "src": "분기보고서", "period": per, "inlog": code in inlog, "rep": True})
+        if (code, per) not in have and c["d"] >= start and ok(code):
+            add(code, per, c["d"])
+    late = {}                                       # (code, 분기) → 마감일 — 캘린더 종목(잠정 발표만 하고 보고서 미제출)도 표시
+    y, q = today.year, (today.month - 1) // 3       # 막 끝난 분기부터 거꾸로, 마감일이 캘린더 기간에 걸친 분기만
+    if q == 0:
+        y, q = y - 1, 4
+    for _ in range(2):
+        due = due_date(y, q)
+        per, (py, pq) = f"{y}.{q}Q", prev_q(y, q)
+        if start <= due.isoformat() and due <= today + timedelta(days=PAST_DAYS):
+            gone = today > due and cdate > due
+            for k, c in conf.items():
+                code, p0 = k.split("|")
+                if p0 != f"{py}.{pq}Q" or c["d"] > qend(y, q).isoformat() or f"{code}|{per}" in conf or not ok(code):
+                    continue
+                if gone:
+                    late[(code, per)] = due.isoformat()
+                if (code, per) not in have:
+                    add(code, per, due.isoformat(), due=due.isoformat(), **({"late": True} if gone else {}))
+        y, q = prev_q(y, q)
     for x in items:
         c = conf.get(f"{x['code']}|{x['period']}")
         x.pop("conf", None)
         if c:
             x["conf"] = c
+        if not x.get("rep"):
+            x.pop("late", None)
+            if (x["code"], x["period"]) in late and (x.get("result") or {}).get("kind") != "regular":   # 스탁이지가 보고서로 바꿔 줬으면 낸 것
+                x["late"] = late[(x["code"], x["period"])]
+        elif c:
+            r = rep_result(x)
+            x.pop("result", None)
+            if r:
+                x["result"] = r
         x["qf"] = (QFIN / f"{x['code']}.json").exists()
     items.sort(key=lambda x: (x["date"], x["name"]))
+
+
+NV_MAX = 500      # 분기보고서 종목 네이버 재무 새로 받기 — 한 번 실행에 최대 (시총 큰 순, 사용자 결정 11-16)
+BAR_MAX = 800     # 분기보고서 종목 일봉 새로 받기 — 한 번 실행에 최대 (주가는 하루 한 번이면 충분)
+
+
+def enrich_rep(items, today, hist, mclose):
+    """분기보고서 종목(rep)에 네이버 추정치·지난 5분기·주가를 붙인다. 1,000곳이 넘어서 시총 큰 순으로 나눠 받고,
+    못 받은 곳은 지난 실행 값을 그대로 둔다(다음 실행이 이어 받음). 네이버 재무는 종목당 하루 1번(naver_fin 캐시),
+    이미 낸 종목은 접수일 이후 받은 게 있으면 다시 안 받는다."""
+    caps = json.loads((DATA / "caps.json").read_text(encoding="utf-8"))["caps"] if (DATA / "caps.json").exists() else {}
+    reps = sorted((x for x in items if x.get("rep")), key=lambda x: -caps.get(x["code"], 0))
+    t = today.isoformat()
+
+    def fresh(x):
+        p = CACHE / f"nv_{x['code']}.json"
+        if not p.exists():
+            return False
+        f = json.loads(p.read_text(encoding="utf-8")).get("fetched", "")
+        return f == t or (x.get("conf") and f >= x["date"])
+    nv = [x for x in reps if fresh(x)]
+    nv += [x for x in reps if not fresh(x)][:NV_MAX]
+    br = [x for x in reps if (x.get("_pf") != t)][:BAR_MAX]
+
+    def fin(x):
+        try:
+            return naver_fin(x["code"], today, x["date"] if x.get("conf") else None)
+        except Exception:
+            return None
+    with ThreadPoolExecutor(4) as ex:
+        fins = list(ex.map(fin, nv))
+    with ThreadPoolExecutor(8) as ex:
+        bars = list(ex.map(lambda x: build.fetch_bars(x["code"]), br))
+    for x, q in zip(nv, fins):
+        if q:
+            y, n = int(x["period"][:4]), int(x["period"][5])
+            x.update({k: v for k, v in checks(x["code"], (y, n * 3), q, hist, today, x["date"]).items() if k in ("est", "past")})
+    for x, b in zip(br, bars):
+        if b:
+            x["price"] = price(b, mclose.get(x["market"]) or {}, x["date"] if x.get("conf") else "")
+            x["_pf"] = t
+    return len(nv), len(br)
 
 
 def attach_conf():
@@ -422,12 +546,18 @@ def main():
             if not NO_DART:
                 time.sleep(0.2)
         out.append(row)
+    if OUT.exists():                               # 분기보고서 종목은 지난 실행에서 받은 추정치·주가를 이어 받는다
+        out += [x for x in json.loads(OUT.read_text(encoding="utf-8"))["items"] if x.get("rep")]
+    add_conf(out, start, today)
+    nnv, nbar = enrich_rep(out, today, hist, mclose)
+    add_conf(out, start, today)                    # 받은 추정치로 예상 대비 다시
     hpath.write_text(json.dumps(hist, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    add_conf(out, start)
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "start": start, "items": out},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart}{f', 정규 실행 때 받을 것 {ndefer}' if ndefer else ''})"
           f" · 추정치 {sum('est' in x for x in out)}"
+          f" · 분기보고서 {sum(bool(x.get('rep') and x.get('conf')) for x in out)}(마감 대기 {sum(bool(x.get('due') and not x.get('late')) for x in out)}"
+          f" · 미제출 {sum(bool(x.get('late')) for x in out)} · 네이버 {nnv} · 일봉 {nbar})"
           + (f" · 실패 {len(fail)}: {fail[:5]}" if fail else "")
           + (f" · DART 파싱 실패 {len(dfail)}: {dfail[:5]}" if dfail else ""))
     if fail:

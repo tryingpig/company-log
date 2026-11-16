@@ -681,6 +681,10 @@ details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visibl
 .earn-list .ep small { font-weight: 400; color: var(--muted); margin-left: 4px; }
 .earn-list .ep.up { color: var(--up); background: var(--up-bg); } .earn-list .ep.dn { color: var(--down); background: var(--down-bg); }
 .earn-list .ep.mut { font-weight: 400; color: var(--muted); }
+.earn-list .ep.late { color: var(--up); background: var(--up-bg); }
+.earn-list .mk.late { color: var(--up); border-color: var(--up); font-weight: 700; }
+.earn-list .en.late { color: var(--up); font-weight: 700; }
+.et tr.cf th, .et tr.cf td { font-weight: 700; background: var(--bg); }
 .earn-list .eb { padding: 4px 16px 14px 32px; font-size: 13px; }
 .earn-list .eb h3 { font-size: 13px; margin: 12px 0 6px; color: var(--text); }
 .earn-list .eb h3 small { font-weight: 400; color: var(--muted); margin-left: 4px; }

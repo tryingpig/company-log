@@ -183,11 +183,14 @@ def accounts(corps, y, q, live, fd):
     new = [f for f in fd if f["ty"] == "A" and f.get("per") == [y, q] and f["corp"] in cs and f["rc"] not in st["done"]]
     need = sorted({f["corp"] for f in new})
     if need:
-        st["v"].update(multi(need, y, q, live, fresh=True))
+        got = multi(need, y, q, live, fresh=True)
+        st["v"].update(got)
         for c in need:                         # 새 보고서·정정 → 그 보고서로 받은 2차·3차 자료도 다시 받게
             for nm in ("full", "holders", "exctv2"):
                 (CACHE / f"{nm}_{c}_{y}_{REPRT[q]}.json").unlink(missing_ok=True)
-        st["done"] += [f["rc"] for f in new]
+        # 접수 당일엔 주요계정 API 에 아직 값이 없는 경우가 있다(11-16 삼성전자·SK하이닉스 등 오후 접수분).
+        # 값이 온 회사만 끝난 것으로 두고 나머지는 다음 실행에 다시 받는다 — 안 그러면 7일 재수집까지 '미제출'로 보임
+        st["done"] += [f["rc"] for f in new if (got.get(f["corp"]) or {}).get("rev") is not None]
     p.write_text(json.dumps(st, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return st["v"], len(need)
 

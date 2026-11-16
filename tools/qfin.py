@@ -176,7 +176,7 @@ def main():
     conf = json.loads(earnings.CONF.read_text(encoding="utf-8")) if earnings.CONF.exists() else {}
     caps = json.loads((DATA / "caps.json").read_text(encoding="utf-8"))["caps"] if (DATA / "caps.json").exists() else {}
     items = [x for x in ej["items"] if re.fullmatch(r"\d{4}\.\dQ", x["period"]) and x["code"] in cc and (not only or x["code"] == only)]
-    items.sort(key=lambda x: (x["date"], caps.get(x["code"], 0)), reverse=True)
+    items.sort(key=lambda x: caps.get(x["code"], 0), reverse=True)     # 시총 큰 순 (사용자 결정 11-16)
     state = {"n": 0, "max": min(run_max, max(0, DAY_MAX - calls_today()))}
     done, wrote, stop = set(), 0, None
     try:
