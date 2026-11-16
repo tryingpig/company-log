@@ -133,6 +133,24 @@ def run_screen():
     return None
 
 
+def run_qfin():
+    """실적 캘린더 「상세 실적」(qfin.py, DART 분기 재무제표 11개 분기). 한 번에 최대 2,000번·하루 6,000번까지만 부르고
+    남은 종목은 다음 실행이 이어 받는다. 실패해도 나머지는 계속."""
+    log("상세 실적 시작")
+    try:
+        r = subprocess.run([PY39, str(ROOT / "tools" / "qfin.py")], cwd=ROOT, capture_output=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        return "상세 실적 1시간 넘게 걸려 중단 (받은 것까지는 저장됨)"
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace")
+    for ln in out.strip().splitlines()[-4:]:
+        log(f"  qfin | {ln}")
+    if r.returncode == 4:
+        return "상세 실적: DART 접속이 도중에 끊김 (다음 실행이 이어 받음)"
+    if r.returncode:
+        return f"상세 실적 실패 (exit {r.returncode}) — " + (out.strip().splitlines() or [""])[-1][:200]
+    return None
+
+
 def run_edges():
     """전 상장사 매수 에지(edges.py). 장중(10:00) 실행은 스스로 건너뛴다. 실패해도 나머지는 계속."""
     log("매수 에지 시작")
@@ -198,6 +216,7 @@ async def main_async():
     edge_problem = None if LIGHT else run_edges()
     flow_problem = None if LIGHT else run_flow()
     comp_problem = None if LIGHT else run_company()
+    qfin_problem = None if LIGHT else run_qfin()           # DART 분기 재무제표 — 정규 실행에서만, 맨 뒤(다른 단계를 늦추지 않게)
     push("데이터 빌드")
 
     codes = an.targets(MIN_REPORTS)
@@ -214,7 +233,7 @@ async def main_async():
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")
-    problems = [p for p in (earn_problem, scr_problem, edge_problem, flow_problem, comp_problem) if p]
+    problems = [p for p in (earn_problem, scr_problem, edge_problem, flow_problem, comp_problem, qfin_problem) if p]
     if biz_fail:
         problems.append(f"사업 내용 정리 실패 {len(biz_fail)}종목 (다음 실행이 다시 시도)")
     if st["stopped"]:

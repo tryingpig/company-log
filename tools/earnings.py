@@ -303,21 +303,37 @@ def price(bars, mc, d0):
     return out
 
 
-def add_conf(items):
-    """잠정 발표는 그대로 두고, 그 분기 분기보고서(DART)가 나왔으면 확정 값을 conf 로 덧붙인다 (사용자 결정 11-11)."""
+QFIN = DATA / "qfin"     # qfin.py 가 쓰는 종목별 「상세 실적」 (11개 분기)
+
+
+def add_conf(items, start):
+    """잠정 발표는 그대로 두고, 그 분기 분기보고서(DART)가 나왔으면 확정 값을 conf 로 덧붙인다 (사용자 결정 11-11).
+    잠정 없이 분기보고서만 낸 종목도 접수일에 rep=True 로 넣는다 (사용자 요청 11-16 — 전 상장사 실적 리뷰)."""
     conf = json.loads(CONF.read_text(encoding="utf-8")) if CONF.exists() else {}
+    items[:] = [x for x in items if not x.get("rep")]
+    have = {(x["code"], x["period"]) for x in items}
+    uni = json.loads(build.UNIVERSE.read_text(encoding="utf-8")) if build.UNIVERSE.exists() else {}
+    inlog = {x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
+    for k, c in conf.items():
+        code, per = k.split("|")
+        if (code, per) in have or c["d"] < start or code not in uni or code[-1] != "0" or "스팩" in uni[code]["name"]:
+            continue
+        items.append({"code": code, "name": uni[code]["name"], "market": MKT.get(uni[code].get("market"), uni[code].get("market") or "KOSPI"),
+                      "date": c["d"], "src": "분기보고서", "period": per, "inlog": code in inlog, "rep": True})
     for x in items:
         c = conf.get(f"{x['code']}|{x['period']}")
         x.pop("conf", None)
         if c:
             x["conf"] = c
+        x["qf"] = (QFIN / f"{x['code']}.json").exists()
+    items.sort(key=lambda x: (x["date"], x["name"]))
 
 
 def attach_conf():
-    """screen.py 가 끝난 뒤 부른다 — 실적 캘린더 다음 실행을 기다리지 않고 확정 값만 갈아 끼운다."""
+    """screen.py·qfin.py 가 끝난 뒤 부른다 — 실적 캘린더 다음 실행을 기다리지 않고 확정 값만 갈아 끼운다."""
     if OUT.exists():
         j = json.loads(OUT.read_text(encoding="utf-8"))
-        add_conf(j["items"])
+        add_conf(j["items"], j["start"])
         OUT.write_text(json.dumps(j, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
@@ -407,8 +423,7 @@ def main():
                 time.sleep(0.2)
         out.append(row)
     hpath.write_text(json.dumps(hist, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    out.sort(key=lambda x: (x["date"], x["name"]))
-    add_conf(out)
+    add_conf(out, start)
     OUT.write_text(json.dumps({"updated": datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "start": start, "items": out},
                               ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart}{f', 정규 실행 때 받을 것 {ndefer}' if ndefer else ''})"

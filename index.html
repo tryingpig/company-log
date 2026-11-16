@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116c">
+<link rel="stylesheet" href="assets/style.css?v=20261116d">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -551,12 +551,14 @@ const eokN = s => { const m = String(s ?? '').replace(/\s/g, '').match(/^(-)?(?:
 const pc = (v, u = '%') => v == null || Number.isNaN(v) ? '<span class="mut">-</span>'
   : typeof v === 'string' ? `<b class="${/흑자|축소/.test(v) ? 'pos' : 'neg'}">${v}</b>`      // 적자가 끼면 말로 (earnings.py growth)
   : `<b class="${v >= 0 ? 'pos' : 'neg'}">${sg(v)}${u}</b>`;
-let earn = [], earnFrom = -0, earnTo = 1;              // 이번 주 = 0, 지난주 = -1, 다음 주 = 1
+let earn = [], earnFrom = -0, earnTo = 1, earnDayOpen = new Set();
+const REP_SHOW = 30;              // 이번 주 = 0, 지난주 = -1, 다음 주 = 1
 function earnCard(x) {
   const today = ymd(new Date()), done = x.date <= today, r = x.result, e = x.est, p = x.price || {};
   const q = x.period.slice(2).replace('.', '.');
   let pill;
-  if (r) pill = `<span class="ep ${r.surprise == null ? '' : r.surprise >= 0 ? 'up' : 'dn'}">${esc(r.headline || '잠정 실적 발표')}</span>`;
+  if (x.rep) pill = x.conf && x.conf.ccy === 'KRW' ? `<span class="ep">분기보고서 · 영업익 ${eok(x.conf.op)} <small>매출 ${eok(x.conf.rev)}</small></span>` : '<span class="ep">분기보고서</span>';
+  else if (r) pill = `<span class="ep ${r.surprise == null ? '' : r.surprise >= 0 ? 'up' : 'dn'}">${esc(r.headline || '잠정 실적 발표')}</span>`;
   else if (done && x.date < today) pill = '<span class="ep mut">발표 후 · 잠정 실적은 시총 5,000억 이상만</span>';
   else if (e) pill = `<span class="ep">추정 영업익 ${eok(e.op)} <small>전년 대비 ${e.yoy.op == null ? '-' : typeof e.yoy.op === 'string' ? e.yoy.op : sg(e.yoy.op) + '%'}</small></span>`;
   else pill = '<span class="ep mut">추정치 없음</span>';
@@ -603,6 +605,16 @@ function earnCard(x) {
     r?.rcept ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept}" target="_blank" rel="noopener">${r.kind === 'regular' ? '분기보고서' : '잠정실적 공시'} 원문 ↗</a>` : '',
     c ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${c.rc}" target="_blank" rel="noopener">분기보고서 원문 ↗</a>` : '',
     `<a href="https://m.stock.naver.com/domestic/stock/${x.code}/finance/quarter" target="_blank" rel="noopener">네이버 분기 실적 ↗</a>`].filter(Boolean).join('');
+  // 「상세 실적」 토글 (사용자 요청 11-16) — 지금 카드 내용은 그대로, 누르면 11개 분기 상세를 받아서 그림
+  const qf = x.qf ? `<div class="qf" data-code="${x.code}" data-p="${x.period}"><button type="button" class="qf-btn" aria-expanded="false">상세 실적 <span>최근 11개 분기 ▾</span></button><div class="qf-body" hidden></div></div>`
+    : x.conf ? '<p class="en">상세 실적(11개 분기)은 DART에서 순서대로 받는 중이에요 — 다음 갱신 때 열려요</p>' : '';
+  if (x.rep) return `<li><details class="ecard"><summary>
+      <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
+      <span class="eq">${q}</span>${pill}</summary>
+    <div class="eb">${conf || '<p class="en">분기보고서</p>'}
+      <p class="en">잠정실적 공시 없이 분기보고서로 실적을 낸 종목이에요 (DART 정기보고서 접수일 기준)</p>${qf}
+      <p class="el">${links}</p>
+    </div></details></li>`;
   return `<li><details class="ecard"><summary>
       <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
       <span class="eq">${q}</span>${pill}</summary>
@@ -615,7 +627,7 @@ function earnCard(x) {
       <h3>주가 흐름 <small>${p.d ? p.d.slice(5).replace('-', '.') + ' 종가 기준' : ''}</small></h3>
       <div class="ecs">${chips.join('') || '<span class="mut">주가 없음</span>'}</div>${react}
       <h3>지난 5분기 실적</h3>
-      <div class="sc-tw">${past}</div>
+      <div class="sc-tw">${past}</div>${qf}
       <p class="el">${links}</p>
     </div></details></li>`;
 }
@@ -624,13 +636,17 @@ function renderEarn() {
   const wk = d => wkAgo(d) * -1;                        // 이번 주 0, 다음 주 1, 지난주 -1
   const all = earn.map(x => ({...x, w: wk(x.date)}));
   const rows = byDayCap(all.filter(x => x.w >= earnFrom && x.w <= earnTo), x => x.date);
-  let html = '', day = '', w = null;
+  let html = '', day = '', w = null, nrep = 0, more = 0;
+  const flush = () => { if (more) html += `<li class="qf-more"><button type="button" data-day="${day}">분기보고서만 낸 종목 ${more}곳 더 보기</button></li>`; more = 0; };
   rows.forEach(x => {
-    if (x.w !== w) { w = x.w; const s = new Date(THIS_MON.getTime() + w * WEEK), e2 = new Date(s); e2.setDate(e2.getDate() + 6);
+    if (x.w !== w) { flush(); w = x.w; const s = new Date(THIS_MON.getTime() + w * WEEK), e2 = new Date(s); e2.setDate(e2.getDate() + 6);
       html += `${html ? '</ol></div>' : ''}<h3 class="ew">${w === 0 ? '이번 주' : w === 1 ? '다음 주' : w === -1 ? '지난주' : w > 0 ? `${w}주 뒤` : `${-w}주 전`} <span>${mdd(s)}~${mdd(e2)} · ${all.filter(y => y.w === w).length}종목</span></h3><div class="panel"><ol class="feed-list earn-list">`; day = ''; }
-    if (x.date !== day) { day = x.date; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})${day === ymd(new Date()) ? ' · 오늘' : ''}</li>`; }
+    if (x.date !== day) { flush(); day = x.date; nrep = 0; html += `<li class="feed-day">${day.slice(5).replace('-', '.')} (${WD[new Date(day + 'T00:00:00').getDay()]})${day === ymd(new Date()) ? ' · 오늘' : ''}</li>`; }
+    // 분기보고서만 낸 종목은 마감일에 1,000곳 넘게 몰려서 그날 시총 큰 순 REP_SHOW곳까지만 펼침 (사용자 결정 11-16)
+    if (x.rep && ++nrep > REP_SHOW && !earnDayOpen.has(day)) { more++; return; }
     html += earnCard(x);
   });
+  flush();
   box.innerHTML = html ? html + '</ol></div>' : '<div class="panel"><p class="empty">이 기간에 잡힌 실적 발표 일정이 없어요</p></div>';
   const minW = Math.min(...all.map(x => x.w)), maxW = Math.max(...all.map(x => x.w));
   document.getElementById('earnPrevBox').hidden = !(all.length && minW < earnFrom);
@@ -641,12 +657,185 @@ function renderEarn() {
 }
 document.getElementById('earnPrev').onclick = () => { earnFrom--; renderEarn(); };
 document.getElementById('earnNext').onclick = () => { earnTo++; renderEarn(); };
+
+// 실적 캘린더 「상세 실적」 (사용자 요청 11-16, 샘플 '실적 퀵 분석' 구성) — data/qfin/{code}.json (tools/qfin.py, DART 분기 재무제표).
+// 판단 문구 없이 공시 값과 계산만. 이중축 없음(매출·재고는 따로). 보고서 전 이번 분기는 잠정 실적을 옅은 막대로
+const QF = {};
+const qLab = p => p.slice(5) + p.slice(2, 4);                  // '2026.3Q' → '3Q26'
+const f0 = v => Math.round(v).toLocaleString('ko-KR');
+const qfNice = (lo, hi, n = 4) => {
+  const raw = (hi - lo) / n || 1, mag = 10 ** Math.floor(Math.log10(raw)), st = [1, 2, 2.5, 5, 10].map(m => m * mag).find(m => m >= raw);
+  return [Math.floor(lo / st) * st, Math.ceil(hi / st) * st, st];
+};
+const qfLg = ser => `<div class="ca-lg">${ser.map(s => `<span><i style="background:var(${s.c})${s.sq ? ';height:10px;width:10px;vertical-align:-1px' : ''}${s.op ? `;opacity:${s.op}` : ''}"></i>${s.l}</span>`).join('')}</div>`;
+function qfAxis(W, H, T, B, L, lo, hi, st, fmt) {
+  const Y = v => T + (hi - v) / (hi - lo || 1) * (H - T - B);
+  let s = '';
+  for (let g = lo; g <= hi + st / 2; g += st) s += `<line x1="${L}" x2="${W}" y1="${Y(g)}" y2="${Y(g)}" stroke="var(--line)" stroke-width="${Math.abs(g) < st / 2 ? 1.2 : .6}"/><text class="ax" x="${L - 5}" y="${Y(g) + 4}" text-anchor="end">${fmt(g)}</text>`;
+  return [s, Y];
+}
+function qfXLab(rows, X, H, W) {
+  const every = W < 420 ? 2 : 1, n = rows.length;
+  return rows.map((r, i) => (n - 1 - i) % every ? '' : `<text class="ax" x="${X(i)}" y="${H - 5}" text-anchor="middle">${qLab(r.p)}</text>`).join('');
+}
+function qfBars(el, rows, ser) {                                // 분기 묶음 막대 — 같은 단위(억원)만
+  const W = Math.max(280, el.clientWidth), H = 190, T = 16, B = 22, L = 42, n = rows.length, gw = (W - L) / n;
+  const vals = rows.flatMap(r => ser.map(s => r[s.k])).filter(v => v != null);
+  if (!vals.length) { el.innerHTML = '<p class="mut">자료 없음</p>'; return; }
+  const [lo, hi, st] = qfNice(Math.min(0, ...vals), Math.max(0, ...vals));
+  const [ax, Y] = qfAxis(W, H, T, B, L, lo, hi, st, f0), y0 = Y(0), X = i => L + (i + .5) * gw;
+  const bw = gw * .72 / ser.length, last = rows.map(r => ser.some(s => r[s.k] != null)).lastIndexOf(true);
+  let s = ax + qfXLab(rows, X, H, W);
+  rows.forEach((r, i) => ser.forEach((sr, j) => {
+    const v = r[sr.k]; if (v == null) return;
+    const x = L + i * gw + gw * .14 + j * bw, top = Math.min(Y(v), y0), h = Math.max(1, Math.abs(Y(v) - y0));
+    s += `<g><title>${qLab(r.p)}${r.pre ? ' 잠정' : ''} ${sr.l} ${v.toLocaleString('ko-KR', {maximumFractionDigits: 1})}억원</title>
+      <rect x="${x + 1}" y="${top}" width="${Math.max(1, bw - 2)}" height="${h}" rx="2" fill="var(${sr.c})" fill-opacity="${r.pre ? .3 : 1}"${r.pre ? ` stroke="var(${sr.c})" stroke-dasharray="3 2"` : ''}/></g>`;
+    if (i === last) s += `<text class="v" x="${x + bw / 2}" y="${v >= 0 ? top - 4 : top + h + 11}" text-anchor="middle">${f0(v)}</text>`;
+  }));
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${s}</svg>`;
+}
+function qfLines(el, rows, ser) {                               // 비율(%) 선
+  const W = Math.max(280, el.clientWidth), H = 180, T = 14, B = 22, L = 42, n = rows.length;
+  const vals = rows.flatMap(r => ser.map(s => r[s.k])).filter(v => v != null && Number.isFinite(v));
+  if (!vals.length) { el.innerHTML = '<p class="mut">자료 없음</p>'; return; }
+  const [lo, hi, st] = qfNice(Math.min(0, ...vals), Math.max(...vals));
+  const [ax, Y] = qfAxis(W, H, T, B, L, lo, hi, st, g => g + '%'), X = i => L + (i + .5) * (W - L) / n;
+  let s = ax + qfXLab(rows, X, H, W);
+  ser.forEach(sr => {
+    const pts = rows.map((r, i) => r[sr.k] == null || !Number.isFinite(r[sr.k]) ? null : [X(i), Y(r[sr.k]), r[sr.k], r]);
+    let seg = [];                                             // 빈 분기에서 선을 끊는다
+    pts.concat([null]).forEach(p => { if (p) seg.push(p); else { if (seg.length > 1) s += `<polyline fill="none" stroke="var(${sr.c})" stroke-width="2" points="${seg.map(q => q[0] + ',' + q[1]).join(' ')}"/>`; seg = []; } });
+    const li = pts.map(Boolean).lastIndexOf(true);
+    pts.forEach((p, i) => { if (!p) return;
+      s += `<g><title>${qLab(p[3].p)} ${sr.l} ${p[2].toFixed(1)}%</title><circle cx="${p[0]}" cy="${p[1]}" r="${i === li ? 4 : 2.5}" fill="var(${sr.c})" stroke="var(--surface)" stroke-width="1.5"/></g>`;
+      if (i === li) s += `<text class="v" x="${p[0] - 6}" y="${p[1] - 8}" text-anchor="end">${p[2].toFixed(1)}%</text>`; });
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${s}</svg>`;
+}
+function qfBridge(el, steps) {                                  // 누적 영업이익 브리지 — 합계는 0부터, 증감은 떠 있는 막대
+  const W = Math.max(280, el.clientWidth), H = 200, T = 18, B = 34, L = 42, n = steps.length, gw = (W - L) / n;
+  let run = 0; const bars = steps.map(st => { const a = st.tot ? 0 : run, b = st.tot ? st.v : run + st.v; run = st.tot ? st.v : b; return [a, b]; });
+  const flat = bars.flat(), [lo, hi, sp] = qfNice(Math.min(0, ...flat), Math.max(0, ...flat));
+  const [ax, Y] = qfAxis(W, H, T, B, L, lo, hi, sp, f0);
+  let s = ax;
+  steps.forEach((st, i) => {
+    const [a, b] = bars[i], x = L + i * gw + gw * .18, w = gw * .64, top = Y(Math.max(a, b)), h = Math.max(1, Math.abs(Y(a) - Y(b)));
+    const c = st.tot ? '--ma20' : st.v >= 0 ? '--up' : '--down';
+    s += `<g><title>${st.l} ${st.tot ? '' : st.v >= 0 ? '+' : ''}${st.v.toLocaleString('ko-KR', {maximumFractionDigits: 1})}억원</title><rect x="${x}" y="${top}" width="${w}" height="${h}" rx="2" fill="var(${c})"/></g>
+      <text class="v" x="${x + w / 2}" y="${top - 4}" text-anchor="middle">${st.tot ? '' : st.v >= 0 ? '+' : ''}${f0(st.v)}</text>
+      <text class="ax" x="${x + w / 2}" y="${H - 19}" text-anchor="middle">${st.l[0]}</text><text class="ax" x="${x + w / 2}" y="${H - 6}" text-anchor="middle">${st.l[1] || ''}</text>`;
+    if (i < n - 1) s += `<line x1="${x + w}" x2="${x + gw}" y1="${Y(b)}" y2="${Y(b)}" stroke="var(--muted)" stroke-dasharray="2 2"/>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${s}</svg>`;
+}
+function qfBal(el, cats, cols) {                                // 재무상태 잔액 — 항목마다 시점 3개(옅음→진함)
+  const W = Math.max(280, el.clientWidth), H = 190, T = 16, B = 22, L = 42, n = cats.length, gw = (W - L) / n;
+  const vals = cats.flatMap(c => c.v).filter(v => v != null);
+  const [lo, hi, st] = qfNice(Math.min(0, ...vals), Math.max(0, ...vals));
+  const [ax, Y] = qfAxis(W, H, T, B, L, lo, hi, st, f0), y0 = Y(0), bw = gw * .72 / cols.length;
+  let s = ax;
+  cats.forEach((c, i) => {
+    s += `<text class="ax" x="${L + (i + .5) * gw}" y="${H - 5}" text-anchor="middle">${c.l}</text>`;
+    c.v.forEach((v, j) => { if (v == null) return;
+      const x = L + i * gw + gw * .14 + j * bw, top = Math.min(Y(v), y0), h = Math.max(1, Math.abs(Y(v) - y0));
+      s += `<g><title>${cols[j].l} ${c.l} ${v.toLocaleString('ko-KR', {maximumFractionDigits: 1})}억원</title><rect x="${x + 1}" y="${top}" width="${Math.max(1, bw - 2)}" height="${h}" rx="2" fill="var(--ma20)" fill-opacity="${cols[j].op}"/></g>`;
+      if (j === c.v.length - 1) s += `<text class="v" x="${x + bw / 2}" y="${top - 4}" text-anchor="middle">${f0(v)}</text>`; });
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${s}</svg>`;
+}
+function qfRender(body, d, x) {
+  const rows = d.q.map(r => ({...r}));
+  const cur = rows.find(r => r.p === x.period), res = x.result;
+  if (cur && cur.rev == null && res?.m) {                        // 보고서 전 — 잠정 실적(매출·영업이익·순이익)만
+    Object.assign(cur, {rev: eokN(res.m.revenue?.value), op: eokN(res.m.operating_profit?.value), ni: eokN(res.m.net_profit?.value), pre: true});
+  }
+  rows.forEach(r => {
+    const ok = r.rev > 0;
+    r.gpm = ok && r.gp != null ? r.gp / r.rev * 100 : null; r.opm = ok && r.op != null ? r.op / r.rev * 100 : null;
+    r.cr = ok && r.cogs != null ? r.cogs / r.rev * 100 : null; r.sr = ok && r.sga != null ? r.sga / r.rev * 100 : null;
+  });
+  const i = rows.map(r => r.rev != null || r.op != null).lastIndexOf(true);
+  if (i < 0) { body.innerHTML = '<p class="mut">분기 실적 자료가 없어요</p>'; return; }
+  const L = rows[i], P = rows[i - 4];
+  const yoy = (a, b) => a == null || b == null ? null : b > 0 && a >= 0 ? (a / b - 1) * 100 : b < 0 && a >= 0 ? '흑자 전환' : b >= 0 && a < 0 ? '적자 전환' : '적자 지속';
+  const tile = (lab, v, unit, sub) => `<div class="qf-t"><span>${lab}</span><b>${v}</b><small>${sub}</small></div>`;
+  const yy = (a, b) => { const v = yoy(a, b); return v == null ? '전년 같은 분기 자료 없음' : `전년 대비 ${pc(typeof v === 'string' ? v : +v.toFixed(1))}`; };
+  const opmD = L.opm != null && P?.opm != null ? `전년 대비 ${pc(+(L.opm - P.opm).toFixed(1), '%p')}` : '';
+  // 재고회전일수(TTM) = (분기말 재고 + 1년 전 재고)/2 ÷ 최근 4분기 매출원가 × 365
+  const c = rows.map(r => r.rev != null && !r.pre).lastIndexOf(true), C = rows[c];
+  const days = k => { if (k < 4) return null; const cg = rows.slice(k - 3, k + 1).map(r => r.cogs); const inv = [rows[k].inv, rows[k - 4].inv];
+    return cg.some(v => v == null) || inv.some(v => v == null) || !(cg.reduce((a, b) => a + b) > 0) ? null : (inv[0] + inv[1]) / 2 / cg.reduce((a, b) => a + b) * 365; };
+  const dd = days(c), dp = days(c - 4);
+  const tiles = [tile('매출액', eok(L.rev), '', yy(L.rev, P?.rev)), tile('영업이익', eok(L.op), '', yy(L.op, P?.op)),
+    tile('영업이익률', L.opm == null ? '-' : L.opm.toFixed(1) + '%', '', opmD || '&nbsp;'), tile('순이익', eok(L.ni), '', yy(L.ni, P?.ni))];
+  const tiles2 = C ? [tile('재고자산', eok(C.inv), '', yy(C.inv, rows[c - 4]?.inv)),
+    tile('재고회전일수', dd == null ? '-' : dd.toFixed(1) + '일', '', dd != null && dp != null ? `전년 대비 ${sg(dd - dp)}일` : '최근 4분기 매출원가 기준'),
+    tile(`영업현금흐름`, eok(C.ocf), '', `${C.p.slice(0, 4)}년 ${C.p[5] === '1' ? '1분기' : `1~${C.p[5]}분기`} 누적`),
+    tile('차입금', eok(C.debt), '', '분기말 · 리스 제외')] : [];
+  // 누적 영업이익 브리지: 올해 1~n분기 합 vs 작년 같은 분기 합 (확정 분기만)
+  let bridge = null;
+  if (C && c - +C.p[5] - 3 >= 0) { const qn = +C.p[5], a = rows.slice(c - qn + 1, c + 1), b = rows.slice(c - qn - 3, c - 3);
+    const sum = (rs, k) => rs.length === qn && rs.every(r => r[k] != null) ? rs.reduce((s, r) => s + r[k], 0) : null;
+    const [r1, g1, s1, o1, r0, g0, s0, o0] = [sum(a, 'rev'), sum(a, 'gp'), sum(a, 'sga'), sum(a, 'op'), sum(b, 'rev'), sum(b, 'gp'), sum(b, 'sga'), sum(b, 'op')];
+    if ([r1, g1, s1, o1, r0, g0, s0, o0].every(v => v != null) && r0 > 0 && r1 > 0) {
+      const gm0 = g0 / r0, vol = (r1 - r0) * gm0, mix = (g1 / r1 - gm0) * r1, sga = -(s1 - s0), etc = o1 - (o0 + vol + mix + sga), per = qn === 1 ? '1Q' : `1~${qn}Q`;
+      bridge = [{l: [`전년 ${per}`, '영업이익'], v: o0, tot: 1}, {l: ['매출 증가', '(전년 GPM)'], v: vol}, {l: ['GPM 변화'], v: mix}, {l: ['판관비'], v: sga},
+        ...(Math.abs(etc) >= 0.5 ? [{l: ['기타', '영업항목'], v: etc}] : []), {l: [`올해 ${per}`, '영업이익'], v: o1, tot: 1}]; } }
+  const balAt = C ? [rows[c - (+C.p[5] === 1 ? 4 : +C.p[5])], rows[c - 1], C] : [];   // 직전 연말(1분기면 전년 같은 분기) · 전분기 · 이번 분기
+  const cats = C ? [['cash', '현금'], ['inv', '재고'], ['ar', d.aro ? '매출채권 등' : '매출채권'], ['ap', d.apo ? '매입채무 등' : '매입채무'], ['debt', '차입금']]
+    .map(([k, l]) => ({l, v: balAt.map(r => r ? r[k] ?? null : null)})).filter(cc => cc.v.some(v => v != null)) : [];
+  const cols = balAt.map((r, j) => ({l: r ? qLab(r.p) : '-', op: [.3, .6, 1][j]}));
+  const fsMix = new Set(rows.filter(r => r.fs).map(r => r.fs)).size > 1;
+  const fig = (cap, k, sub = '', wide = false, lg = '') => `<figure class="ca-fig${wide ? ' wide' : ''}"><figcaption>${cap}${sub ? ` <span class="mut">${sub}</span>` : ''}</figcaption>${lg}<div class="ca-c" data-k="${k}"></div></figure>`;
+  body.innerHTML = `<p class="qf-h">${qLab(L.p)}${L.pre ? ' 잠정' : ''} · ${d.fs === 'OFS' ? '별도' : '연결'} · 억원</p>
+    <div class="qf-tiles">${tiles.join('')}</div>${tiles2.length ? `${C !== L ? `<p class="qf-h">재고·현금흐름·차입금은 ${qLab(C.p)} 분기보고서 기준 (이번 분기 보고서 전)</p>` : ''}<div class="qf-tiles">${tiles2.join('')}</div>` : ''}
+    <div class="ca-charts">
+      ${fig('분기 매출·영업이익', 'ro', '분기 3개월 값', true, qfLg([{l: '매출', c: '--ma20', sq: 1}, {l: '영업이익', c: '--ma5', sq: 1}]))}
+      ${fig('GPM·OPM', 'mg', '매출 대비 %', false, qfLg([{l: 'GPM 매출총이익률', c: '--ma10'}, {l: 'OPM 영업이익률', c: '--ma5'}]))}
+      ${fig('매출원가율·판관비율', 'cs', '매출 대비 %', false, qfLg([{l: '매출원가율', c: '--ma20'}, {l: '판관비율', c: '--ma60'}]))}
+      ${fig('분기 매출총이익·판관비', 'gs', '', true, qfLg([{l: '매출총이익', c: '--ma10', sq: 1}, {l: '판관비', c: '--ma60', sq: 1}]))}
+      ${bridge ? fig('누적 영업이익 변화 브리지', 'br', '계산상 분해 · 원인 분석이 아님') : ''}
+      ${cats.length ? fig('재무상태 잔액', 'bs', '분기말', !bridge, qfLg(cols.map(cl => ({l: cl.l, c: '--ma20', sq: 1, op: cl.op})))) : ''}
+      ${fig('재고자산', 'iv', '분기말 잔액 · 매출은 위 첫 차트', true)}
+    </div>
+    <p class="ca-src">DART 분기·반기·사업보고서 재무제표(${fsMix ? '연결 우선, 연결이 없는 분기는 별도' : d.fs === 'OFS' ? '별도' : '연결'}). 4분기 = 연간 − 3분기 누적. 비율은 같은 분기 값으로 직접 계산.
+      차입금 = 차입금·사채 계정 합(리스 제외, 회사마다 계정 이름이 달라 일부 빠질 수 있음). 영업현금흐름은 그 해 누적.${L.pre ? ' 옅은 막대 = 분기보고서 전 잠정 실적.' : ''} 수출·내수, 수주잔고, 분기 컨센서스는 넣지 않았어요.</p>`;
+  const draw = () => body.querySelectorAll('.ca-c').forEach(el => {
+    const k = el.dataset.k;
+    if (k === 'ro') qfBars(el, rows, [{k: 'rev', l: '매출', c: '--ma20'}, {k: 'op', l: '영업이익', c: '--ma5'}]);
+    else if (k === 'gs') qfBars(el, rows, [{k: 'gp', l: '매출총이익', c: '--ma10'}, {k: 'sga', l: '판관비', c: '--ma60'}]);
+    else if (k === 'iv') qfBars(el, rows, [{k: 'inv', l: '재고자산', c: '--ma20'}]);
+    else if (k === 'mg') qfLines(el, rows, [{k: 'gpm', l: 'GPM', c: '--ma10'}, {k: 'opm', l: 'OPM', c: '--ma5'}]);
+    else if (k === 'cs') qfLines(el, rows, [{k: 'cr', l: '매출원가율', c: '--ma20'}, {k: 'sr', l: '판관비율', c: '--ma60'}]);
+    else if (k === 'br') qfBridge(el, bridge);
+    else if (k === 'bs') qfBal(el, cats, cols);
+  });
+  draw();
+  body._draw = draw;
+}
+document.getElementById('earnList').addEventListener('click', ev => {
+  const more = ev.target.closest('.qf-more button');
+  if (more) { earnDayOpen.add(more.dataset.day); renderEarn(); return; }
+  const btn = ev.target.closest('.qf-btn'); if (!btn) return;
+  const box = btn.parentElement, body = box.querySelector('.qf-body'), code = box.dataset.code;
+  const open = body.hidden; body.hidden = !open; btn.setAttribute('aria-expanded', open);
+  btn.querySelector('span').textContent = `최근 11개 분기 ${open ? '▴' : '▾'}`;
+  if (!open || body.dataset.done) return;
+  body.dataset.done = 1; body.innerHTML = '<p class="mut">불러오는 중…</p>';
+  const x = earn.find(e => e.code === code && e.period === box.dataset.p);
+  (QF[code] ||= fetch(`data/qfin/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null))
+    .then(d => d ? qfRender(body, d, x) : (body.innerHTML = '<p class="mut">상세 실적 파일이 아직 없어요</p>'))
+    .catch(() => { body.innerHTML = '<p class="mut">불러오지 못했어요</p>'; delete body.dataset.done; });
+});
+addEventListener('resize', () => document.querySelectorAll('.qf-body:not([hidden])').forEach(b => b._draw && b._draw()));
 fetch('data/earnings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   if (!d) return;
   earn = d.items;
   const today = ymd(new Date());
-  document.getElementById('earnSub').textContent = `스탁이지 실적발표 일정 · ${earn.length}종목 · 갱신 ${d.updated}`;
-  const n = earn.filter(x => x.date === today).length;
+  const nr = earn.filter(x => x.rep).length;
+  document.getElementById('earnSub').textContent = `스탁이지 실적발표 일정 ${earn.length - nr}종목 + DART 분기보고서만 낸 ${nr}종목 · 갱신 ${d.updated}`;
+  const n = earn.filter(x => x.date === today && !x.rep).length;
   document.getElementById('tnEarn').textContent = n ? n : '';
   // 이번 주·다음 주가 비었으면(실적 시즌 끝) 일정이 있는 가장 최근 주부터
   const ws = earn.map(x => -wkAgo(x.date));
