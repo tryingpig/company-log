@@ -52,8 +52,9 @@
         <span><span class="sw ma60" style="background:var(--ma60)"></span>60일 이동평균</span>
         <span><span class="sw dash"></span>볼린저</span>
         <span class="sep" aria-hidden="true"></span>
-        <span><span class="mk pos">▲</span>목표가 상향</span>
-        <span><span class="mk neg">▼</span>하향</span>
+        <!-- 차트의 리포트 마커(arrowUp/arrowDown)와 같은 화살표 모양으로 (사용자 지적 11-16 — ▲는 차트 모양과 달라 못 알아봄) -->
+        <span><span class="mk pos"><svg width="9" height="11" viewBox="0 0 10 12" aria-hidden="true" style="vertical-align:-1px"><path d="M5 0L10 6H7V12H3V6H0Z" fill="currentColor"/></svg></span>목표가 상향</span>
+        <span><span class="mk neg"><svg width="9" height="11" viewBox="0 0 10 12" aria-hidden="true" style="vertical-align:-1px"><path d="M5 12L10 6H7V0H3V6H0Z" fill="currentColor"/></svg></span>하향 (옆 숫자 = 그날 리포트 수)</span>
         <span><span class="mk warn">⚠&#xFE0E;</span>의견 전환</span>
         <span class="sep" aria-hidden="true"></span>
         <span><span class="vbar"></span>거래량</span>
