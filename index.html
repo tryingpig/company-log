@@ -567,6 +567,7 @@ function earnCard(x) {
   else if (x.rep && x.odd === 'reit' && !r) pill = '<span class="ep mut">리츠 · 마감일 기준 다름</span>';
   else if (x.rep && x.due && !r) pill = e ? `<span class="ep">보고서 마감일 · 추정 영업익 ${eok(e.op)}</span>` : '<span class="ep mut">보고서 마감일 · 추정치 없음</span>';
   else if (x.rep && r) pill = `<span class="ep ${r.surprise == null ? '' : r.surprise >= 0 ? 'up' : 'dn'}">분기보고서 · ${esc(r.headline)}</span>`;
+  else if (x.rep && x.filed && !x.conf) pill = `<span class="ep mut">${esc(x.filed.nm.replace(/^\[.*?\]/, ''))} 제출 · 실적 값은 받는 중</span>`;
   else if (x.rep) pill = x.conf && x.conf.ccy === 'KRW' ? `<span class="ep">분기보고서 · 영업익 ${eok(x.conf.op)} <small>매출 ${eok(x.conf.rev)}</small></span>` : '<span class="ep">분기보고서</span>';
   else if (r) pill = `<span class="ep ${r.surprise == null ? '' : r.surprise >= 0 ? 'up' : 'dn'}">${esc(r.headline || '잠정 실적 발표')}</span>`;
   else if (done && x.date < today) pill = '<span class="ep mut">발표 후 · 잠정 실적은 시총 5,000억 이상만</span>';
@@ -616,6 +617,7 @@ function earnCard(x) {
   const links = [x.inlog ? `<a href="stock.html?code=${x.code}">company-log 종목 페이지 →</a>` : '',
     r?.rcept ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept}" target="_blank" rel="noopener">${r.kind === 'regular' ? '분기보고서' : '잠정실적 공시'} 원문 ↗</a>` : '',
     c ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${c.rc}" target="_blank" rel="noopener">분기보고서 원문 ↗</a>` : '',
+    x.filed && !c && !r ? `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${x.filed.rc}" target="_blank" rel="noopener">보고서 원문 ↗</a>` : '',
     `<a href="https://m.stock.naver.com/domestic/stock/${x.code}/finance/quarter" target="_blank" rel="noopener">네이버 분기 실적 ↗</a>`].filter(Boolean).join('');
   // 「상세 실적」 토글 (사용자 요청 11-16) — 지금 카드 내용은 그대로, 누르면 11개 분기 상세를 받아서 그림
   const qf = x.qf ? `<div class="qf" data-code="${x.code}" data-p="${x.period}"><button type="button" class="qf-btn" aria-expanded="false">상세 실적 <span>최근 11개 분기 ▾</span></button><div class="qf-body" hidden></div></div>`

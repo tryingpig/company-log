@@ -414,7 +414,66 @@ def add_conf(items, start, today=None):
             if r:
                 x["result"] = r
         x["qf"] = (QFIN / f"{x['code']}.json").exists()
+    check_late(items, today)
     items.sort(key=lambda x: (x["date"], x["name"]))
+
+
+FEED = ROOT / "raw" / "screen" / "feed.json"   # screen.py 가 받는 DART 공시 목록 (정기보고서 per=[연, 분기])
+CORPS = Path(r"C:\ClaudeCode\tryingpig.github.io\.claude\skills\dart-financials\cache\corp_codes.json")
+LATE_CHK = CACHE / "late_check.json"
+PERIOD = re.compile(r"(분기|반기|사업)보고서\s*\((\d{4})\.(\d{2})\)")
+
+
+def check_late(items, today):
+    """미제출(late)로 잡힌 종목을 DART 공시 목록과 한 번 더 대조한다 (사용자 요청 11-17 — 11-17 에 43곳 중 20곳이 실제로는 냈음).
+    ① screen 공시 목록(feed)에 그 분기 정기보고서가 있으면 낸 것 ② 없으면 회사별로 DART 목록을 직접 조회 (하루 한 번, 결과 캐시).
+    냈으면 late 를 풀고 filed(접수번호·날짜·보고서 이름)를 붙인다 — 값(매출·이익)은 screen 이 다음에 받아 오면 채워진다."""
+    lt = [x for x in items if x.get("late")]
+    if not lt:
+        return
+    feed = json.loads(FEED.read_text(encoding="utf-8"))["items"] if FEED.exists() else []
+    fa = {}
+    for f in feed:
+        if f.get("ty") == "A" and f.get("per"):
+            fa.setdefault((f["corp"], f"{f['per'][0]}.{f['per'][1]}Q"), f)
+    corps = json.loads(CORPS.read_text(encoding="utf-8")) if CORPS.exists() else {}
+    chk = json.loads(LATE_CHK.read_text(encoding="utf-8")) if LATE_CHK.exists() else {}
+    key, nq, nf = None, 0, 0
+    for x in lt:
+        corp = (corps.get(x["code"]) or {}).get("corp_code")
+        if not corp:
+            continue
+        k = f"{x['code']}|{x['period']}"
+        hit = fa.get((corp, x["period"]))
+        if hit:
+            hit = {"rc": hit["rc"], "d": hit["d"], "nm": hit["nm"]}
+        elif (chk.get(k) or {}).get("on") == today.isoformat():
+            hit = chk[k].get("hit")
+        else:
+            try:
+                key = key or dart_key()
+                y, q = int(x["period"][:4]), int(x["period"][5])
+                j = requests.get("https://opendart.fss.or.kr/api/list.json", params={"crtfc_key": key, "corp_code": corp, "pblntf_ty": "A",
+                                 "bgn_de": (qend(y, q) + timedelta(days=1)).strftime("%Y%m%d"), "end_de": today.strftime("%Y%m%d"),
+                                 "page_count": "100"}, timeout=20).json()
+            except Exception:                           # 조회 실패 → 판정 그대로 둔다
+                continue
+            nq += 1
+            r = next((r for r in j.get("list", []) if (m := PERIOD.search(r.get("report_nm", "")))
+                      and (int(m.group(2)), int(m.group(3)) // 3) == (y, q)), None)
+            hit = {"rc": r["rcept_no"], "d": r["rcept_dt"], "nm": re.sub(r"\s+", " ", r["report_nm"]).strip()} if r else None
+            chk[k] = {"on": today.isoformat(), "hit": hit}
+        if hit:
+            nf += 1
+            d = f"{hit['d'][:4]}-{hit['d'][4:6]}-{hit['d'][6:8]}"
+            x.pop("late", None)
+            x.pop("frn", None)
+            x["filed"] = {**hit, "d": d}
+            if x.get("rep") and not x.get("conf"):      # 마감일에 있던 카드 → 실제 접수일로
+                x["date"] = d
+                x.pop("due", None)
+    LATE_CHK.write_text(json.dumps(chk, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"  미제출 DART 대조 {len(lt)}곳(직접 조회 {nq}) → 실제 제출 {nf}곳 해제")
 
 
 NV_MAX = 500      # 분기보고서 종목 네이버 재무 새로 받기 — 한 번 실행에 최대 (시총 큰 순, 사용자 결정 11-16)
