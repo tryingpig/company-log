@@ -268,7 +268,8 @@ def dart_result(d, rc, est):
                  "qoq": growth(x.get("cur"), x.get("prev")), "yoy": growth(x.get("cur"), x.get("yago"))}
     part = [(names[k][1], vs[k]) for k in ("rev", "op") if vs[k] is not None]
     if not part:
-        head = f"매출 {eok_str(d['rev']['cur'])} · 영업이익 {eok_str(d['op']['cur'])}"
+        head = " · ".join(f"{n} {eok_str(d[k]['cur'])}" for k, n in (("rev", "매출"), ("op", "영업이익")) if d[k]["cur"] is not None) \
+            or (f"순이익 {eok_str(d['net']['cur'])}" if d["net"]["cur"] is not None else "분기보고서 제출")   # 금융사는 순이익만 오기도 함
     elif len(part) == 2 and (part[0][1] >= 0) == (part[1][1] >= 0):
         head = f"매출·영업이익 모두 예상 {'상회' if part[0][1] >= 0 else '하회'}({part[0][1]:+.1f}%·{part[1][1]:+.1f}%)"
     else:
@@ -388,10 +389,13 @@ def add_conf(items, start, today=None):
                 code, p0 = k.split("|")
                 if p0 != f"{py}.{pq}Q" or c["d"] > qend(y, q).isoformat() or f"{code}|{per}" in conf or not ok(code):
                     continue
-                if gone:
+                # 리츠는 결산 주기가 달라 「반기보고서 (2026.09)」처럼 내서 분기 마감일로 판정 못 함 → 미제출 판정 빼고 표시만 (사용자 결정 11-17)
+                # 해외 상장사(900·950 코드)는 기한이 다를 수 있어 미제출은 두되 (해외) 꼬리표 — 사용자가 참고만 함
+                kw = {"odd": "reit"} if "리츠" in uni[code]["name"] else {"frn": True} if code[0] == "9" else {}
+                if gone and "odd" not in kw:
                     late[(code, per)] = due.isoformat()
                 if (code, per) not in have:
-                    add(code, per, due.isoformat(), due=due.isoformat(), **({"late": True} if gone else {}))
+                    add(code, per, due.isoformat(), due=due.isoformat(), **kw, **({"late": True} if gone and "odd" not in kw else {}))
         y, q = prev_q(y, q)
     for x in items:
         c = conf.get(f"{x['code']}|{x['period']}")
@@ -402,6 +406,8 @@ def add_conf(items, start, today=None):
             x.pop("late", None)
             if (x["code"], x["period"]) in late and (x.get("result") or {}).get("kind") != "regular":   # 스탁이지가 보고서로 바꿔 줬으면 낸 것
                 x["late"] = late[(x["code"], x["period"])]
+                if x["code"][0] == "9":
+                    x["frn"] = True
         elif c:
             r = rep_result(x)
             x.pop("result", None)
@@ -557,7 +563,8 @@ def main():
     print(f"실적 캘린더 {len(out)}종목 ({start}~) · 잠정 실적 {sum('result' in x for x in out)}(DART 원문 {ndart}{f', 정규 실행 때 받을 것 {ndefer}' if ndefer else ''})"
           f" · 추정치 {sum('est' in x for x in out)}"
           f" · 분기보고서 {sum(bool(x.get('rep') and x.get('conf')) for x in out)}(마감 대기 {sum(bool(x.get('due') and not x.get('late')) for x in out)}"
-          f" · 미제출 {sum(bool(x.get('late')) for x in out)} · 네이버 {nnv} · 일봉 {nbar})"
+          f" · 미제출 {sum(bool(x.get('late') and not x.get('frn')) for x in out)} · 해외 미제출 {sum(bool(x.get('late') and x.get('frn')) for x in out)}"
+          f" · 리츠 {sum(x.get('odd') == 'reit' for x in out)} · 네이버 {nnv} · 일봉 {nbar})"
           + (f" · 실패 {len(fail)}: {fail[:5]}" if fail else "")
           + (f" · DART 파싱 실패 {len(dfail)}: {dfail[:5]}" if dfail else ""))
     if fail:

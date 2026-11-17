@@ -190,7 +190,8 @@ def accounts(corps, y, q, live, fd):
                 (CACHE / f"{nm}_{c}_{y}_{REPRT[q]}.json").unlink(missing_ok=True)
         # 접수 당일엔 주요계정 API 에 아직 값이 없는 경우가 있다(11-16 삼성전자·SK하이닉스 등 오후 접수분).
         # 값이 온 회사만 끝난 것으로 두고 나머지는 다음 실행에 다시 받는다 — 안 그러면 7일 재수집까지 '미제출'로 보임
-        st["done"] += [f["rc"] for f in new if (got.get(f["corp"]) or {}).get("rev") is not None]
+        # 매출 줄이 아예 없는 회사도 있어 영업이익·순이익 중 하나라도 오면 끝난 것으로 본다 (11-17)
+        st["done"] += [f["rc"] for f in new if any((got.get(f["corp"]) or {}).get(k) is not None for k in ("rev", "op", "net"))]
     p.write_text(json.dumps(st, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return st["v"], len(need)
 
@@ -690,7 +691,8 @@ def main():
             sys.exit(4)
         for corp, d in cur.items():                                # 실적 캘린더 '확정' 줄용 (억원)
             rc = d.get("rcept") or ""
-            if corp in code_of and d.get("rev") is not None and len(rc) >= 8:
+            # 매출 줄이 없는 회사(백화점 「영업수익」 등)도 보고서는 낸 것 — 영업이익·순이익 중 하나라도 있으면 싣는다 (11-17 미제출 오판 6곳)
+            if corp in code_of and any(d.get(k) is not None for k in ("rev", "op", "net")) and len(rc) >= 8:
                 krw = d["ccy"] == "KRW"                            # 외화 공시는 환율이 없어 금액을 싣지 않는다
                 conf[f"{code_of[corp]}|{y}.{q}Q"] = {"d": f"{rc[:4]}-{rc[4:6]}-{rc[6:8]}", "rc": rc, "fs": d["fs"], "ccy": d["ccy"],
                                                      **{k: None if d.get(k) is None or not krw else round(d[k] / 1e8, 1)

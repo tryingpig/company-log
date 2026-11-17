@@ -559,9 +559,12 @@ function earnCard(x) {
   const q = x.period.slice(2).replace('.', '.');
   const dueD = (x.due || x.late || '').slice(5).replace('-', '.');
   // 분기보고서 마감일이 지났는데 DART 에 없으면 빨간색 (사용자 결정 11-16 — 정기보고서 미제출)
-  const lateP = x.late ? `<p class="en late">분기보고서 법정 제출 마감일(${dueD})이 지났는데 DART에 아직 없어요 — 제출기한 연장 신고(5영업일)를 했을 수 있고, 연장 기한까지도 안 내면 관리종목 지정 사유예요</p>` : '';
+  // 해외 상장사는 기한이 다를 수 있어 회색 「(해외)」로 참고만, 리츠는 결산 주기가 달라 판정 안 함 (사용자 결정 11-17)
+  const lateP = !x.late ? '' : x.frn ? `<p class="en">분기보고서 마감일(${dueD})이 지났는데 DART에 아직 없어요 — 해외 상장사라 제출기한이 국내 회사와 다를 수 있어 참고만 해 주세요</p>`
+    : `<p class="en late">분기보고서 법정 제출 마감일(${dueD})이 지났는데 DART에 아직 없어요 — 제출기한 연장 신고(5영업일)를 했을 수 있고, 연장 기한까지도 안 내면 관리종목 지정 사유예요</p>`;
   let pill;
-  if (x.rep && x.late) pill = `<span class="ep late">미제출 · 마감 ${dueD} 지남</span>`;
+  if (x.rep && x.late) pill = x.frn ? `<span class="ep mut">미제출 (해외) · 마감 ${dueD} 지남</span>` : `<span class="ep late">미제출 · 마감 ${dueD} 지남</span>`;
+  else if (x.rep && x.odd === 'reit' && !r) pill = '<span class="ep mut">리츠 · 마감일 기준 다름</span>';
   else if (x.rep && x.due && !r) pill = e ? `<span class="ep">보고서 마감일 · 추정 영업익 ${eok(e.op)}</span>` : '<span class="ep mut">보고서 마감일 · 추정치 없음</span>';
   else if (x.rep && r) pill = `<span class="ep ${r.surprise == null ? '' : r.surprise >= 0 ? 'up' : 'dn'}">분기보고서 · ${esc(r.headline)}</span>`;
   else if (x.rep) pill = x.conf && x.conf.ccy === 'KRW' ? `<span class="ep">분기보고서 · 영업익 ${eok(x.conf.op)} <small>매출 ${eok(x.conf.rev)}</small></span>` : '<span class="ep">분기보고서</span>';
@@ -617,7 +620,7 @@ function earnCard(x) {
   // 「상세 실적」 토글 (사용자 요청 11-16) — 지금 카드 내용은 그대로, 누르면 11개 분기 상세를 받아서 그림
   const qf = x.qf ? `<div class="qf" data-code="${x.code}" data-p="${x.period}"><button type="button" class="qf-btn" aria-expanded="false">상세 실적 <span>최근 11개 분기 ▾</span></button><div class="qf-body" hidden></div></div>`
     : x.conf ? '<p class="en">상세 실적(11개 분기)은 DART에서 순서대로 받는 중이에요 — 다음 갱신 때 열려요</p>' : '';
-  const lateTag = x.late ? '<small class="mk late">보고서 미제출</small>' : '';
+  const lateTag = !x.late ? '' : x.frn ? '<small class="mk">미제출 (해외)</small>' : '<small class="mk late">보고서 미제출</small>';
   if (x.rep && !r && !(x.due && !x.conf)) return `<li><details class="ecard"><summary>
       <span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
       <span class="eq">${q}</span>${pill}</summary>
@@ -631,7 +634,7 @@ function earnCard(x) {
     <div class="eb">${x.rep ? '' : lateP}
       <h3>${r ? r.kind === 'regular' ? '실적' : '잠정 실적' : '이번 분기 추정치'} <small>${[r?.kind === 'regular' ? '분기보고서 확정' : '', e ? `추정치는 네이버 컨센서스 · ${e.d.slice(5).replace('-', '.')} 기록` : ''].filter(Boolean).join(' · ')}</small></h3>
       <div class="sc-tw"><table class="et"><thead><tr><th></th>${r ? `<th>추정치</th><th class="mg">이익률</th><th>${r.kind === 'regular' ? '확정 실적' : '잠정 실적'}</th><th class="mg">이익률</th><th>예상 대비</th><th>전년 대비 <small>(YoY)</small></th><th>전분기 대비 <small>(QoQ)</small></th>` : '<th>추정치</th><th class="mg">이익률</th><th>전년 대비 <small>(YoY)</small></th><th>전분기 대비 <small>(QoQ)</small></th>'}</tr></thead><tbody>${estRows}</tbody></table></div>
-      ${x.rep && !r ? (x.late ? lateP : `<p class="en">잠정실적 공시 없이 분기보고서로 실적을 내는 종목이라 제출일을 미리 알 수 없어요 — 법정 마감일(${dueD})에 올려 두고, 접수되면 그날로 옮겨요</p>`)
+      ${x.rep && !r ? (x.late ? lateP : x.odd === 'reit' ? `<p class="en">리츠는 결산 주기가 달라 「반기보고서 (2026.09)」처럼 내는 경우가 많아, 분기 마감일(${dueD})로 미제출을 따지지 않아요 — 제출 여부는 DART에서 확인해 주세요</p>` : `<p class="en">잠정실적 공시 없이 분기보고서로 실적을 내는 종목이라 제출일을 미리 알 수 없어요 — 법정 마감일(${dueD})에 올려 두고, 접수되면 그날로 옮겨요</p>`)
         : !r ? '' : x.rep ? '<p class="en">확정 실적은 DART 분기보고서, 전년·전분기 대비는 네이버 분기 실적, 예상 대비는 제출 전 네이버 추정치 기준이에요 (잠정실적 공시 없이 분기보고서로 낸 종목)</p>'
         : r.src === 'dart'
         ? '<p class="en">잠정 실적·전년/전분기 대비는 DART 잠정실적 공시 원문 기준, 예상 대비는 네이버 추정치 기준이에요(시총 5,000억 미만이라 스탁이지 목록에 없는 종목)</p>'
@@ -863,9 +866,9 @@ fetch('data/earnings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : nul
   if (!d) return;
   earn = d.items;
   const today = ymd(new Date());
-  const nr = earn.filter(x => x.rep).length, nd = earn.filter(x => x.rep && x.due && !x.late).length, nl = earn.filter(x => x.late).length;
+  const nr = earn.filter(x => x.rep).length, nd = earn.filter(x => x.rep && x.due && !x.late).length, nl = earn.filter(x => x.late && !x.frn).length, nf = earn.filter(x => x.late && x.frn).length;
   document.getElementById('earnSub').textContent = `스탁이지 실적발표 일정 ${earn.length - nr}종목 + DART 분기보고서만 낸 ${nr - nd - earn.filter(x => x.rep && x.late).length}종목`
-    + (nd ? ` · 보고서 마감일 대기 ${nd}` : '') + (nl ? ` · 보고서 미제출 ${nl}` : '') + ` · 갱신 ${d.updated}`;
+    + (nd ? ` · 보고서 마감일 대기 ${nd}` : '') + (nl ? ` · 보고서 미제출 ${nl}` : '') + (nf ? ` · 해외 미제출 ${nf}` : '') + ` · 갱신 ${d.updated}`;
   const n = earn.filter(x => x.date === today && !x.rep).length;
   document.getElementById('tnEarn').textContent = n ? n : '';
   // 이번 주·다음 주가 비었으면(실적 시즌 끝) 일정이 있는 가장 최근 주부터
