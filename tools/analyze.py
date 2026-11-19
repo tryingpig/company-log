@@ -24,6 +24,7 @@ import heapq
 import itertools
 import io
 import json
+import math
 import re
 import sys
 import time
@@ -328,6 +329,17 @@ def verify_items(got, reports_by_id, broker_text):
 
 KRW = {"조원": 10000, "조": 10000, "십억원": 10, "십억": 10, "억원": 1, "억": 1, "백만원": 0.01, "백만": 0.01}
 SCALES = (10000, 10, 1, 0.01)   # 단위 빠진 금액의 후보 자릿수(조·십억·억·백만) — 같은 항목 다른 증권사 값과 맞춘다
+_NUM = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+_CHG = re.compile(r"\s*%\s*p|\s*%p|\s*%\s*\(?\s*(?:y-?y|yoy|q-?q|qoq|전년|전분기)", re.I)
+
+
+def _is_change(m):
+    """원문에서 그 숫자가 '%p'·'% y-y' 처럼 증감 폭으로만 쓰였으면 True — 수준 값(OPM 22.5%)과 섞이지 않게 (사용자 11-19)."""
+    raw, v = m.get("raw") or "", m.get("value")
+    if v is None:
+        return False
+    hits = [x for x in _NUM.finditer(raw) if abs(abs(float(x.group().replace(",", ""))) - abs(v)) < 1e-9]
+    return bool(hits) and all(_CHG.match(raw, x.end()) for x in hits)
 HALF_LIFE = 30          # 최근 가중: 30일 지날 때마다 무게 절반 (build.py 와 같은 값)
 
 
@@ -419,6 +431,23 @@ def _guess_unit(metrics, anchor=None):
     return out
 
 
+def _fix_scale(m, ref, unit, loose):
+    """증권사 값 하나 → 표의 칸. 기준(ref = data/fin 실적·컨센서스)과 5배 넘게 차이 나면
+    ①② 정확히 10분의 1 이면(×10 이 기준 ±30%, 분기는 연간÷4 기준이라 0.6~1.67배) 십억원 표를 억원으로 옮겨 적은 자릿수 오타로 보고 고친다
+       (11-19 전수: 오타 206건 중 164건이 이 경우). 100배·10배 큰 쪽 등은 실제 전망일 수 있어 고치지 않는다.
+    ④ 그래도 안 맞으면 값은 그대로 두고 odd(화면 '!') — 증권사마다 전망이 크게 다를 수 있어 원문 확인을 권한다(평균에서는 뺀다)."""
+    v = m["value"]
+    r = {"value": v, "date": m["date"][:10], "id": m["id"], "odd": False, "weight": _w(m["date"])}
+    if not ref or not v or v <= 0 or 0.2 < v / ref < 5:
+        return r
+    lo, hi = (0.6, 1.67) if loose else (0.7, 1.43)
+    if unit == "억원" and lo < v * 10 / ref < hi:
+        r.update(value=round(v * 10, 2), fix=10, orig=v)
+    else:
+        r["odd"] = True
+    return r
+
+
 def build_table(metrics, anchor=None):
     """(항목, 기간, 단위)별로 증권사마다 가장 최근 값 비교표. 1곳만 언급한 것도(11-13 사용자, 화면에 '1곳' 표시). 금액은 억원으로 통일.
     anchor(data/fin 실적·추정)가 있으면 단위 빠진 값의 자릿수와 '원문 단위 확인' 판정을 그 값 기준으로."""
@@ -436,34 +465,38 @@ def build_table(metrics, anchor=None):
         val, unit = (guess[id(m)], "억원") if id(m) in guess else _norm_unit(m["unit"], m["value"])
         if unit.strip().lower() in ("x", "배"):
             unit = "배"
+        if _is_change(m):
+            continue                                  # ③ '2.8%p 하락'·'-96% y-y' 처럼 증감 폭을 수준 값으로 잘못 뽑은 것
         key = (m["item"], per_, unit)
-        cur = groups.setdefault(key, {}).get(m["broker"])
-        if not cur or m["id"] > cur["id"]:
-            groups[key][m["broker"]] = dict(m, value=val)
+        groups.setdefault(key, {}).setdefault(m["broker"], []).append(dict(m, value=val))
     table = []
     for (item, period, unit), per in groups.items():
-        # 원문 요약 자체에 단위 오타가 있다(7,090억원을 "709.0억원"으로 적는 식). 값은 고치지 않고
-        # 중앙값과 5배 이상 차이 나면 '원문 단위 확인' 표시 후 평균에서 뺀다. 2개사뿐이면 평균을 내지 않는다.
-        vals = sorted(m["value"] for m in per.values())
-        med = vals[len(vals) // 2] if len(vals) % 2 else (vals[len(vals) // 2 - 1] + vals[len(vals) // 2]) / 2
-
-        ref = anchor.get((item, period)) if unit == "억원" else None
-
-        def odd(v):
-            if ref:
-                return not (0.2 < v / ref < 5)
-            if len(vals) == 2:
-                return vals[0] > 0 and vals[1] / vals[0] >= 5
-            return med > 0 and v > 0 and not (0.2 < v / med < 5)
-        rows = [{"broker": b, "value": m["value"], "date": m["date"][:10], "id": m["id"], "odd": odd(m["value"]),
-                 "weight": _w(m["date"])} for b, m in per.items()]
+        # 단위 판정 기준(사용자 결정 11-19): 금액은 억원으로 맞추고, 기준 = data/fin 실적·컨센서스(연간) → 없으면 증권사 값 중앙값.
+        ref, ref_src = (anchor.get((item, period)), "fin") if unit == "억원" else (None, "")
+        loose = "Q" in period                         # 분기 기준은 연간 ÷ 4 라 계절성만큼 느슨하게
+        latest = {b: max(ms, key=lambda m: m["id"]) for b, ms in per.items()}
+        if not ref:
+            vals = sorted(m["value"] for m in latest.values() if m["value"] and m["value"] > 0)
+            ref, ref_src = (vals[len(vals) // 2], "med") if len(vals) >= 3 else (None, "")
+        rows = []
+        for b, ms in per.items():
+            last = max(m["id"] for m in ms)
+            cand = [_fix_scale(m, ref, unit if ref_src == "fin" else "", loose) for m in ms if m["id"] == last]   # 자릿수 보정은 실적·컨센서스 기준일 때만
+            # ③ 한 리포트가 같은 항목·기간에 다른 값을 둘 이상 냄(사업부 값·이전 추정치가 섞임) → 자릿수 보정 뒤 기준에 가까운 하나만
+            r = min(cand, key=lambda r: abs(math.log(r["value"] / ref)) if ref and r["value"] and r["value"] > 0 else 0)
+            r = dict(r, broker=b)
+            others = {round(c["value"], 1) for c in cand if abs(c["value"] - r["value"]) > 0.02 * abs(r["value"] or 1)}
+            if others:
+                r["mixed"] = sorted(others)
+            rows.append(r)
         good = [r["value"] for r in rows if not r["odd"]]
         wm = _wmean([(r["value"], r["weight"]) for r in rows if not r["odd"]])
         table.append({"item": item, "period": period, "unit": unit, "n": len(rows),
                       "wmean": round(wm, 2) if wm is not None else None,
                       "mean": round(sum(good) / len(good), 2) if good else None,
                       "min": min(good) if good else None, "max": max(good) if good else None,
-                      "odd": len(rows) - len(good),
+                      "odd": len(rows) - len(good), "fixed": sum("fix" in r for r in rows),
+                      **({"ref": round(ref, 1), "ref_src": ref_src} if ref and unit == "억원" else {}),
                       "brokers": sorted(rows, key=lambda x: x["date"], reverse=True)})
     order = ["매출액", "영업이익", "지배순이익", "순이익", "EPS", "BPS", "ROE", "OPM",
              "적용 PER", "적용 PBR", "적용 EV/EBITDA"]
