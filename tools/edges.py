@@ -1,6 +1,6 @@
 """매수 에지 — 전 상장사(보통주) 중 지금 매수 에지가 켜진 종목 (사용자 요청 2026-11-11).
 
-리포트 로그 종목만 보던 에지(build.py edge_states)를 전 상장사로 넓힌다. 매도 에지는 너무 많아 싣지 않는다(사용자 결정).
+리포트 로그 종목만 보던 에지(build.py edge_states)를 전 상장사로 넓힌다. 매도 에지는 11-19부터 edges_sell.json 에 따로(탭).
   - 일봉: 네이버 fchart(build.fetch_bars), 시총: 네이버 m.stock 시가총액 순위(억원)
   - 장중 값은 하루 봉이 덜 끝나 에지가 켜졌다 꺼질 수 있으므로 장 마감(15:30) 뒤 실행에서만 계산한다.
     10:00 실행은 건너뛰고 앞 저장본을 그대로 둔다. --force 면 시각과 상관없이 계산.
@@ -22,10 +22,10 @@ import build
 
 ROOT, DATA, KST = build.ROOT, build.DATA, build.KST
 OUT = DATA / "edges.json"
+OUT_SELL = DATA / "edges_sell.json"   # 매도 에지 — 화면이 탭을 열 때만 받는다(사용자 요청 11-19)
 CHARTS = DATA / "charts"
 CLOSES = 122          # 화면 차트 62일 + 60일선 워밍업
 SHOW = 62
-SURGE_DAYS = 10    # 「에지 중 거래량 급증」 탭에 싣는 기간(거래일)
 NV_H = {"User-Agent": "Mozilla/5.0 (iPhone) Mobile", "Referer": "https://m.stock.naver.com/"}
 
 
@@ -99,42 +99,40 @@ def main():
                                                    separators=(",", ":")), encoding="utf-8")
     inlog ={x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
 
-    items, surges = [], []
-    days = sorted({x["d"] for b in ok.values() for x in b[-SURGE_DAYS * 2:]})[-SURGE_DAYS:]
+    items, sells = [], []
     for c, b in ok.items():
         if b[-1]["d"] != last:                  # 거래정지 등으로 오늘 봉이 없으면 뺀다
             continue
         st = build.edge_states(b)
-        e_str = "".join("+" if v == 1 else "-" if v == -1 else "." for v in st[-SHOW:])
-        # 에지 중 거래량 급증 — 최근 SURGE_DAYS 거래일에 난 것 (매수·매도 에지 둘 다, 사용자 결정 11-19)
-        for sv in build.surge_events(b, st):
-            if sv["d"] >= days[0]:
-                i = next(k for k in range(len(b)) if b[k]["d"] == sv["d"])
-                surges.append({"code": c, "name": stocks[c]["name"], "market": stocks[c]["market"], "cap": caps.get(c),
-                               "inlog": c in inlog, **sv, "now": st[-1],
-                               "after": round((b[-1]["c"] / b[i]["c"] - 1) * 100, 1),
-                               "si": SHOW - (len(b) - i),           # e 문자열(최근 62일) 안에서 급증한 날 칸
-                               "c": [x["c"] for x in b[-CLOSES:]], "e": e_str})
         e = build.edge_now(st, b)
-        if not e or e["s"] != 1:
+        if not e:
             continue
         i0 = len(b) - e["run"]                  # 켜진 날
         base = b[i0 - 1]["c"]                   # 켜지기 전날 종가 대비
         tv = sum(x["c"] * x["v"] for x in b[-20:]) / 20 / 1e8
-        items.append({"code": c, "name": stocks[c]["name"], "market": stocks[c]["market"], "cap": caps.get(c),
-                      "run": e["run"], "since": e["since"], "chg": round((b[-1]["c"] / base - 1) * 100, 1),
-                      "tv": round(tv, 1), "inlog": c in inlog,
-                      "c": [x["c"] for x in b[-CLOSES:]],
-                      "e": e_str})
-    items.sort(key=lambda x: (x["run"], -(x["cap"] or 0)))
-    surges.sort(key=lambda x: (x["d"], x["cap"] or 0), reverse=True)
-    nolog = {x["code"]: x for x in items + surges if not x["inlog"]}          # 차트만 보는 종목 페이지 — 급증 종목도
-    write_charts(list(nolog.values()), ok, now)
-    OUT.write_text(json.dumps({"updated": now.strftime("%Y-%m-%d %H:%M"), "d": last, "universe": len(ok),
-                               "items": items, "surge_days": days, "surges": surges}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        # 이번 에지 안에서 난 거래량 급증 중 가장 최근 것 — 화면 「에지 중 거래량 급증」 필터 (사용자 결정 11-19)
+        sv = [x for x in build.surge_events(b, st) if x["d"] >= e["since"]]
+        row = {"code": c, "name": stocks[c]["name"], "market": stocks[c]["market"], "cap": caps.get(c),
+               "s": e["s"], "run": e["run"], "since": e["since"], "chg": round((b[-1]["c"] / base - 1) * 100, 1),
+               "tv": round(tv, 1), "inlog": c in inlog,
+               **({"sv": {k: sv[-1][k] for k in ("d", "run", "x", "up", "chg")}} if sv else {}),
+               "c": [x["c"] for x in b[-CLOSES:]],
+               "e": "".join("+" if v == 1 else "-" if v == -1 else "." for v in st[-SHOW:])}
+        (items if e["s"] == 1 else sells).append(row)
+    for lst in (items, sells):
+        lst.sort(key=lambda x: (x["run"], -(x["cap"] or 0)))
+    # 차트만 보는 종목 페이지(data/charts): 매수 에지는 전부, 매도 에지는 너무 많아(11-19 1,142종목) 시총 5,000억 초과 또는 급증 난 종목만.
+    # 나머지 매도 에지 종목 카드는 네이버 차트로 연결한다
+    for x in sells:
+        x["chart"] = x["inlog"] or (x["cap"] or 0) > 5000 or "sv" in x
+    write_charts([x for x in items + sells if not x["inlog"] and x.get("chart", True)], ok, now)
+    head = {"updated": now.strftime("%Y-%m-%d %H:%M"), "d": last, "universe": len(ok)}
+    OUT.write_text(json.dumps({**head, "items": items}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    OUT_SELL.write_text(json.dumps({**head, "items": sells}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    ns, nss = sum("sv" in x for x in items), sum("sv" in x for x in sells)
     miss = len(codes) - len(ok)
-    print(f"매수 에지 {len(items)}종목 (오늘 켜짐 {sum(x['run'] == 1 for x in items)}) / {len(ok)}종목 {last} 기준"
-          f" · 거래량 급증 {len(surges)}건(최근 {SURGE_DAYS}거래일)"
+    print(f"매수 에지 {len(items)}종목 (오늘 켜짐 {sum(x['run'] == 1 for x in items)}) · 매도 에지 {len(sells)}종목"
+          f" · 에지 중 거래량 급증 매수 {ns}·매도 {nss} / {len(ok)}종목 {last} 기준"
           f" · {time.time() - t0:.0f}초" + (f" · 일봉 못 받음 {miss}" if miss else ""))
 
 
