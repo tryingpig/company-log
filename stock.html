@@ -410,6 +410,17 @@ function drawEdge(vis) {
     if (up) box.innerHTML = `<span class="edgec mut">정배열 유지</span><span class="es-t">5·10일선 &gt; 20일선 &gt; 60일선 순서는 그대로인데 기울기가 꺾여 매수 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
     if (dn) box.innerHTML = `<span class="edgec mut">역배열 유지</span><span class="es-t">5·10일선 &lt; 20일선 &lt; 60일선 순서는 그대로인데 기울기가 돌아서 매도 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
   }
+  // 에지 메뉴 카드와 같은 숫자 3개: 시총 · 켜진 뒤(켜지기 전날 종가 대비) · 거래대금 20일 평균 (사용자 요청 11-19)
+  if (cur && run < data.prices.length) {
+    const P = data.prices, base = P[P.length - run - 1].c, chg = (P[P.length - 1].c / base - 1) * 100;
+    const tv = P.slice(-20).reduce((s, b) => s + b.c * b.v, 0) / Math.min(20, P.length) / 1e8;
+    const eokT = v => v >= 10000 ? `${Math.floor(v / 10000)}조${Math.round(v % 10000) ? ' ' + fmt(Math.round(v % 10000)) + '억' : ''}` : `${fmt(Math.round(v))}억`;
+    box.insertAdjacentHTML('beforeend', `<span class="es-t" id="edgeMeta"><span id="edgeCap"></span>켜진 뒤 <b class="${pctCls(chg)}">${pctTxt(chg)}</b> · 거래대금 20일 평균 <b>${eokT(tv)}</b></span>`);
+    fetch('data/caps.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(j => {
+      const v = j?.caps?.[data.code], el = document.getElementById('edgeCap');
+      if (v && el) el.innerHTML = `시총 <b>${eokT(v)}</b> · `;
+    }).catch(() => {});
+  }
   // 지금 에지 안에서 난 거래량 급증 — 상태 줄에 가장 최근 것 (사용자 결정 11-19)
   const sv = cur ? (data.surges || []).filter(x => x.side === cur && x.d >= st[st.length - run].d).pop() : null;
   if (sv) box.innerHTML += `<span class="edgec ${sv.up ? 'up' : 'dn'}">${cur === 1 ? '상승' : '하락'} 중 ${sv.up ? '매수' : '매도'} 급증</span><span class="es-t">${sv.d.slice(5).replace('-', '.')} 에지 D+${sv.run}에 거래량이 이번 에지 기간 평균의 <b>${sv.x}배</b> (그날 ${sv.chg > 0 ? '+' : ''}${sv.chg}%, ${sv.up ? '양봉' : '음봉'})</span>`;
