@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116g">
+<link rel="stylesheet" href="assets/style.css?v=20261119a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -83,7 +83,7 @@
           <li>상대강도 = 종목 주가 ÷ 시장 지수(코스피 종목은 코스피, 코스닥 종목은 코스닥)를 차트 첫날 = 100으로 맞춘 값이에요. 선이 오르면 그동안 시장보다 강한 거예요.</li>
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
           <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
-          <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선은 전일보다 상승하고 5일선은 상승이거나 10일선 위(모두 만족, 5일선이 잠깐 꺾여도 10일선 위면 유지). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요. 차트 배경도 매수 에지였던 날은 옅은 빨강, 매도 에지였던 날은 옅은 파랑이에요(범례 「에지 배경」으로 켜고 꺼요).</li>
+          <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선은 전일보다 상승(보합 포함)하고 5일선은 10일선 위면 꺾여도 유지(모두 만족). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요. 차트 배경도 매수 에지였던 날은 옅은 빨강, 매도 에지였던 날은 옅은 파랑이에요(범례 「에지 배경」으로 켜고 꺼요).</li>
           <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 기본은 「일별」로 외국인·기관의 날마다 순매수를 0선 위(순매수)·아래(순매도)로 쌓은 막대(개인은 위 줄에 숫자로만), 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
@@ -357,11 +357,11 @@ const RL_PREV = 3, RL_GAP = [1, 5];
 function gapWhy(c, i0, n) {
   const ma = (i, k) => c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k, cnt = {};
   for (let i = i0; i < i0 + n; i++) {
-    const m = k => ma(i, k), p = k => ma(i - 1, k), r = new Set();
+    const m = k => ma(i, k), r = new Set();
     if (!(Math.min(m(5), m(10)) > m(20))) r.add('5·10일선이 20일선 아래');
     if (!(m(20) > m(60))) r.add('20일선이 60일선 아래');
-    if (!(m(5) > p(5) || m(5) > m(10))) r.add('5일선 꺾여 10일선 아래');
-    [10, 20, 60].forEach(k => { if (!(m(k) > p(k))) r.add(`${k}일선 ${m(k) < p(k) ? '하락' : '보합'}`); });
+    if (c[i] < c[i - 5] && !(m(5) > m(10))) r.add('5일선 꺾여 10일선 아래');   // 기울기 = 들어온 종가 vs 빠진 종가(보합 정확히)
+    [10, 20, 60].forEach(k => { if (c[i] < c[i - k]) r.add(`${k}일선 하락`); });   // 보합은 유지(11-19)
     r.forEach(t => { cnt[t] = (cnt[t] || 0) + 1; });
   }
   return Object.entries(cnt).map(([t, k]) => n > 1 ? `${t} ${k}일` : t).join(' · ');
@@ -394,9 +394,17 @@ function drawEdge(vis) {
     const d0 = st[st.length - run].d, since = `${d0.slice(5).replace('-', '.')} (${'일월화수목금토'[new Date(d0 + 'T00:00:00').getDay()]})`;
     box.hidden = false;
     box.innerHTML = cur === 1
-      ? `<span class="edgec up">▲ 매수 에지 D+${run}</span><span class="es-t">${since} 켜짐 · 5·10일선 &gt; 20일선 &gt; 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위</span>`
-      : `<span class="edgec dn">▼ 매도 에지 D+${run}</span><span class="es-t">${since} 켜짐 · 5·10일선 &lt; 20일선 &lt; 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래</span>`;
-  } else box.hidden = true;
+      ? `<span class="edgec up">▲ 매수 에지 D+${run}</span><span class="es-t">${since} 켜짐 · 5·10일선 &gt; 20일선 &gt; 60일선, 10·20·60일선 상승(보합 포함) · 5일선은 10일선 위면 꺾여도 유지</span>`
+      : `<span class="edgec dn">▼ 매도 에지 D+${run}</span><span class="es-t">${since} 켜짐 · 5·10일선 &lt; 20일선 &lt; 60일선, 10·20·60일선 하락(보합 포함) · 5일선은 10일선 아래면 올라도 유지</span>`;
+  } else {
+    // 에지는 꺼졌지만 정배열(역배열) 순서는 그대로 → 회색 「정배열 유지」 + 무엇이 꺾였는지 (사용자 결정 11-19)
+    const c = data.prices.map(b => b.c), i = c.length - 1, ma = k => c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k;
+    const up = i >= 60 && Math.min(ma(5), ma(10)) > ma(20) && ma(20) > ma(60), dn = i >= 60 && Math.max(ma(5), ma(10)) < ma(20) && ma(20) < ma(60);
+    const why = up ? gapWhy(c, i, 1) : dn ? [10, 20, 60].filter(k => c[i] > c[i - k]).map(k => `${k}일선 상승`).join(' · ') : '';
+    box.hidden = !(up || dn);
+    if (up) box.innerHTML = `<span class="edgec mut">정배열 유지</span><span class="es-t">5·10일선 &gt; 20일선 &gt; 60일선 순서는 그대로인데 기울기가 꺾여 매수 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
+    if (dn) box.innerHTML = `<span class="edgec mut">역배열 유지</span><span class="es-t">5·10일선 &lt; 20일선 &lt; 60일선 순서는 그대로인데 기울기가 돌아서 매도 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
+  }
   const rl = cur === 1 && e.length === data.prices.length ? relitAt(e, data.prices.map(b => b.c)) : null;
   if (rl) box.innerHTML += `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 3거래일↑ 켜짐 → 1~5거래일 쉼(매도 에지 없음·종가 60일선 위) → 다시 켜짐">↻ 재점등</span><span class="es-t">앞서 <b>${rl.prev}일</b> 켜짐 → <b>${rl.gap}일</b> 쉼 (${esc(rl.why)} · 앞 고점 대비 <b>${rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>`;
   if (!e) return;

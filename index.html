@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-<link rel="stylesheet" href="assets/style.css?v=20261116g">
+<link rel="stylesheet" href="assets/style.css?v=20261119a">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -170,7 +170,7 @@
         <summary class="rl-h">▲ 매수 에지 — 전 상장사(보통주)에서 아래를 <b>모두</b> 만족하는 종목</summary>
         <ol class="rl">
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
-          <li><b>10·20·60일선은 전일보다 상승, 5일선은 상승이거나 10일선 위</b> (5일선이 잠깐 꺾여도 10일선 위면 유지)</li>
+          <li><b>10·20·60일선은 전일보다 상승(보합 포함), 5일선은 10일선 위면 꺾여도 유지</b></li>
         </ol>
         <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 옅은 파랑 배경과 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 2~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 하루만 꺼졌다 켜진 건 깜빡임이라 빼고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
@@ -212,8 +212,8 @@
     </div>
     <div class="chips" id="chips">
       <span class="lab">필터</span>
-      <button type="button" class="chip" data-f="eup" aria-pressed="false" title="5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위">▲ 매수 에지</button>
-      <button type="button" class="chip" data-f="edn" aria-pressed="false" title="5·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래">▼ 매도 에지</button>
+      <button type="button" class="chip" data-f="eup" aria-pressed="false" title="5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선 상승(보합 포함) · 5일선은 10일선 위면 꺾여도 유지">▲ 매수 에지</button>
+      <button type="button" class="chip" data-f="edn" aria-pressed="false" title="5·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 10·20·60일선 하락(보합 포함) · 5일선은 10일선 아래면 올라도 유지">▼ 매도 에지</button>
       <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
       <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
       <button type="button" class="chip" data-f="flip" aria-pressed="false">⚠&#xFE0E; 최근 2주 전환</button>
@@ -409,9 +409,9 @@ function edgeBadge(s) {
   if (!e) return '';
   const t = `${e.since.slice(5).replace('-', '.')}부터`;
   const rl = e.s === 1 && EDGE_RL[s.code];          // 재점등은 매수 에지 메뉴(edges.json) 계산 결과를 그대로
-  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위">▲ 매수 에지 D+${e.run}</span>` +
+  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 10·20·60일선 상승(보합 포함) · 5일선은 10일선 위면 꺾여도 유지">▲ 매수 에지 D+${e.run}</span>` +
                      (rl ? `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 ${rl.prev}일 켜짐 → ${rl.gap}일 쉼(${rl.why} · 앞 고점 대비 ${rl.dip.toFixed(1)}%, 60일선 위 유지) → 다시 켜짐">↻ 재점등</span>` : '')
-                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래">▼ 매도 에지 D+${e.run}</span>`;
+                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 10·20·60일선 하락(보합 포함) · 5일선은 10일선 아래면 올라도 유지">▼ 매도 에지 D+${e.run}</span>`;
 }
 
 // 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 / 실적 캘린더 (주소 끝 #flips · #signals · #earn 으로 바로 열기)
@@ -1177,11 +1177,11 @@ const RL_PREV = 3, RL_GAP = [1, 5];
 function gapWhy(c, i0, n) {
   const ma = (i, k) => c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k, cnt = {};
   for (let i = i0; i < i0 + n; i++) {
-    const m = k => ma(i, k), p = k => ma(i - 1, k), r = new Set();
+    const m = k => ma(i, k), r = new Set();
     if (!(Math.min(m(5), m(10)) > m(20))) r.add('5·10일선이 20일선 아래');
     if (!(m(20) > m(60))) r.add('20일선이 60일선 아래');
-    if (!(m(5) > p(5) || m(5) > m(10))) r.add('5일선 꺾여 10일선 아래');
-    [10, 20, 60].forEach(k => { if (!(m(k) > p(k))) r.add(`${k}일선 ${m(k) < p(k) ? '하락' : '보합'}`); });
+    if (c[i] < c[i - 5] && !(m(5) > m(10))) r.add('5일선 꺾여 10일선 아래');   // 기울기 = 들어온 종가 vs 빠진 종가(보합 정확히)
+    [10, 20, 60].forEach(k => { if (c[i] < c[i - k]) r.add(`${k}일선 하락`); });   // 보합은 유지(11-19)
     r.forEach(t => { cnt[t] = (cnt[t] || 0) + 1; });
   }
   return Object.entries(cnt).map(([t, k]) => n > 1 ? `${t} ${k}일` : t).join(' · ');

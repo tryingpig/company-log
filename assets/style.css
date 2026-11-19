@@ -744,6 +744,7 @@ details.sig-rule > summary:focus-visible, details.sc-card > summary:focus-visibl
 .edgec { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 0 7px; white-space: nowrap; border: 1px solid; }
 .edgec.up { color: var(--up); background: var(--up-bg); border-color: var(--up); }
 .edgec.dn { color: var(--down); background: var(--down-bg); border-color: var(--down); }
+.edgec.mut { color: var(--muted); background: transparent; border-color: var(--line); }
 /* 매수 에지 재점등 (11-16) */
 .edgec.relit { color: var(--up); background: var(--up-bg); border-color: var(--up); border-style: dashed; margin-right: 4px; }
 .edge-rl { display: block; font-size: 12px; color: var(--text-2); margin: 2px 0 4px; }
