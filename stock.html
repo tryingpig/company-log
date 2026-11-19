@@ -146,6 +146,7 @@ try { flMode = localStorage.getItem('cl-flow2') === 'cum' ? 'cum' : 'day'; } cat
 // 여러 칸(가격·수급·상대강도) 날짜 범위를 함께 움직인다
 const linked = [];
 let syncing = false;
+let EDGE_EXCL = {};                                 // 공개매수·거래정지·가격 고정 종목 (edges.py → data/edge_excl.json)
 function linkChart(c) {
   linked.push(c);
   c.timeScale().subscribeVisibleLogicalRangeChange(r => {
@@ -394,7 +395,12 @@ function drawEdge(vis) {
   const cur = st.length ? st[st.length - 1].s : 0;
   let run = 0;
   for (let i = st.length - 1; i >= 0 && cur && st[i].s === cur; i--) run++;
-  if (cur) {
+  const ex = EDGE_EXCL[data.code];
+  if (cur && ex) {                                   // 공개매수·거래정지·가격 고정 — 에지 대신 회색 안내 (사용자 결정 11-19)
+    box.hidden = false;
+    box.innerHTML = `<span class="edgec mut">에지 판정 제외</span><span class="es-t">${esc(ex.why === 'tender' ? `공개매수 진행 중(${ex.d.slice(5).replace('-', '.')} 신고${ex.by ? ' · ' + ex.by : ''}) — 주가가 공개매수 가격에 묶여 이평선 추세로 보지 않아요` : ex.why === 'halt' ? '거래정지 — 최근 5거래일 중 거래량 0인 날이 있어 에지 판정에서 뺐어요' : '가격 고정 — 최근 5거래일 가격 폭이 1% 미만이라 에지 판정에서 뺐어요(합병·상장폐지 절차 등 원인 확인 필요)')}</span>`
+      + (ex.rc ? `<a class="es-t" href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${ex.rc}" target="_blank" rel="noopener">공개매수신고서 ↗</a>` : '');
+  } else if (cur) {
     // 첫 화면 매수 에지 목록과 같은 'D+n'(켜진 날 = D+1) 표기 (사용자 요청 11-19)
     const d0 = st[st.length - run].d, since = `${d0.slice(5).replace('-', '.')} (${'일월화수목금토'[new Date(d0 + 'T00:00:00').getDay()]})`;
     box.hidden = false;
@@ -411,7 +417,7 @@ function drawEdge(vis) {
     if (dn) box.innerHTML = `<span class="edgec mut">역배열 유지</span><span class="es-t">5·10일선 &lt; 20일선 &lt; 60일선 순서는 그대로인데 기울기가 돌아서 매도 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
   }
   // 에지 메뉴 카드와 같은 숫자 3개: 시총 · 켜진 뒤(켜지기 전날 종가 대비) · 거래대금 20일 평균 (사용자 요청 11-19)
-  if (cur && run < data.prices.length) {
+  if (cur && !ex && run < data.prices.length) {
     const P = data.prices, base = P[P.length - run - 1].c, chg = (P[P.length - 1].c / base - 1) * 100;
     const tv = P.slice(-20).reduce((s, b) => s + b.c * b.v, 0) / Math.min(20, P.length) / 1e8;
     const eokT = v => v >= 10000 ? `${Math.floor(v / 10000)}조${Math.round(v % 10000) ? ' ' + fmt(Math.round(v % 10000)) + '억' : ''}` : `${fmt(Math.round(v))}억`;
@@ -422,9 +428,9 @@ function drawEdge(vis) {
     }).catch(() => {});
   }
   // 지금 에지 안에서 난 거래량 급증 — 상태 줄에 가장 최근 것 (사용자 결정 11-19)
-  const sv = cur ? (data.surges || []).filter(x => x.side === cur && x.d >= st[st.length - run].d).pop() : null;
+  const sv = cur && !ex ? (data.surges || []).filter(x => x.side === cur && x.d >= st[st.length - run].d).pop() : null;
   if (sv) box.innerHTML += `<span class="edgec ${sv.up ? 'up' : 'dn'}">${cur === 1 ? '상승' : '하락'} 중 ${sv.up ? '매수' : '매도'} 급증</span><span class="es-t">${sv.d.slice(5).replace('-', '.')} 에지 D+${sv.run}에 거래량이 이번 에지 기간 평균의 <b>${sv.x}배</b> (그날 ${sv.chg > 0 ? '+' : ''}${sv.chg}%, ${sv.up ? '양봉' : '음봉'})</span>`;
-  const rl = cur === 1 && e.length === data.prices.length ? relitAt(e, data.prices.map(b => b.c)) : null;
+  const rl = cur === 1 && !ex && e.length === data.prices.length ? relitAt(e, data.prices.map(b => b.c)) : null;
   if (rl) box.innerHTML += `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 3거래일↑ 켜짐 → 1~5거래일 쉼(매도 에지 없음·종가 60일선 위) → 다시 켜짐">↻ 재점등</span><span class="es-t">앞서 <b>${rl.prev}일</b> 켜짐 → <b>${rl.gap}일</b> 쉼 (${esc(rl.why)} · 앞 고점 대비 <b>${rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>`;
   if (!e) return;
   // 큰 차트 배경: 차트 뒤 캔버스(차트 배경이 투명이라 비친다)
@@ -1248,9 +1254,10 @@ Promise.all([
   fetch(`data/fin/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   fetch(`data/biz/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   fetch(`data/flow/${code}.json`, {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch('data/edge_excl.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})),
 ])
-  .then(([d, a, m, fin, biz, fl]) => {
-    data = d; analysis = a; market = m; flow = fl;
+  .then(([d, a, m, fin, biz, fl, ex]) => {
+    data = d; analysis = a; market = m; flow = fl; EDGE_EXCL = ex || {};
     idxMap = {};
     (m && d.market && m[d.market] || []).forEach(x => { idxMap[x.d] = x.c; });
     renderHead(); drawChart(); renderRelPerf(); renderCompany(fin, biz);

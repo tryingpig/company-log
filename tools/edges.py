@@ -14,7 +14,7 @@ import json
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 
@@ -45,6 +45,40 @@ def market_caps():
             page += 1
             time.sleep(0.2)
     return out
+
+
+PIN_DAYS, PIN_RANGE = 5, 0.01   # 가격 고정: 최근 5거래일 고가~저가 폭 1% 미만 (11-19 롯데렌탈 0.51%·한국철강 0.39% 만 걸리는 선)
+
+
+def tenders(today):
+    """진행 중 공개매수 {종목코드: {d, rc, by}} — DART 공시 목록 공개매수(D004) 최근 89일.
+    공개매수신고서(정정 포함)가 있고 그 뒤 공개매수결과보고서가 없으면 진행 중 (사용자 결정 11-19: 공개매수 중 주가는 매수 가격에 묶여 에지가 아님)."""
+    import earnings
+    j = requests.get("https://opendart.fss.or.kr/api/list.json", timeout=30, params={
+        "crtfc_key": earnings.dart_key(), "pblntf_detail_ty": "D004", "page_count": "100",
+        "bgn_de": (today - timedelta(days=89)).strftime("%Y%m%d"), "end_de": today.strftime("%Y%m%d")}).json()
+    out, done = {}, {}
+    for r in sorted(j.get("list") or [], key=lambda r: r["rcept_no"]):
+        c, nm = r.get("stock_code") or "", r.get("report_nm", "")
+        if not c:
+            continue
+        if "결과보고서" in nm:
+            done[c] = r["rcept_no"]
+        elif "공개매수신고서" in nm and c not in out:
+            out[c] = {"d": r["rcept_dt"], "rc": r["rcept_no"], "by": r.get("flr_nm", "")}
+    return {c: v for c, v in out.items() if done.get(c, "") < v["rc"]}
+
+
+def excluded_why(b, tender):
+    """에지 판정에서 뺄 이유 — 공개매수 진행 중 · 거래정지(최근 5거래일 중 거래량 0) · 가격 고정. 없으면 None."""
+    if tender:
+        return {"why": "tender", "d": f"{tender['d'][:4]}-{tender['d'][4:6]}-{tender['d'][6:]}", "rc": tender["rc"], "by": tender["by"]}
+    last = b[-PIN_DAYS:]
+    if any(not x["v"] or not x["l"] for x in last):
+        return {"why": "halt"}
+    if max(x["h"] for x in last) / min(x["l"] for x in last) - 1 < PIN_RANGE:
+        return {"why": "pinned"}
+    return None
 
 
 def write_charts(items, bars, now):
@@ -99,13 +133,23 @@ def main():
                                                    separators=(",", ":")), encoding="utf-8")
     inlog ={x["code"] for x in json.loads((DATA / "index.json").read_text(encoding="utf-8"))["stocks"]}
 
-    items, sells = [], []
+    try:
+        tnd = tenders(now.date())
+    except Exception as ex:                     # 공시 목록을 못 받으면 가격 기준(거래정지·가격 고정)만으로 뺀다
+        print(f"공개매수 목록 못 받음: {type(ex).__name__}")
+        tnd = {}
+    items, sells, excl = [], [], []
     for c, b in ok.items():
         if b[-1]["d"] != last:                  # 거래정지 등으로 오늘 봉이 없으면 뺀다
             continue
         st = build.edge_states(b)
         e = build.edge_now(st, b)
         if not e:
+            continue
+        why = excluded_why(b, tnd.get(c))
+        if why:                                 # 에지가 켜져 있어도 추세가 아니라 묶인 가격 — 목록에서 빼고 따로 적는다
+            excl.append({"code": c, "name": stocks[c]["name"], "market": stocks[c]["market"], "cap": caps.get(c),
+                         "s": e["s"], "run": e["run"], **why})
             continue
         i0 = len(b) - e["run"]                  # 켜진 날
         base = b[i0 - 1]["c"]                   # 켜지기 전날 종가 대비
@@ -127,12 +171,17 @@ def main():
         x["chart"] = x["inlog"] or (x["cap"] or 0) > 5000 or "sv" in x
     write_charts([x for x in items + sells if not x["inlog"] and x.get("chart", True)], ok, now)
     head = {"updated": now.strftime("%Y-%m-%d %H:%M"), "d": last, "universe": len(ok)}
+    excl.sort(key=lambda x: -(x["cap"] or 0))
+    head["excluded"] = excl
+    # 종목 페이지·종목 목록이 에지 표시 대신 회색 안내를 띄우는 작은 파일
+    (DATA / "edge_excl.json").write_text(json.dumps({x["code"]: {k: x[k] for k in ("why", "d", "rc", "by") if k in x} for x in excl},
+                                                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     OUT.write_text(json.dumps({**head, "items": items}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     OUT_SELL.write_text(json.dumps({**head, "items": sells}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     ns, nss = sum("sv" in x for x in items), sum("sv" in x for x in sells)
     miss = len(codes) - len(ok)
     print(f"매수 에지 {len(items)}종목 (오늘 켜짐 {sum(x['run'] == 1 for x in items)}) · 매도 에지 {len(sells)}종목"
-          f" · 에지 중 거래량 급증 매수 {ns}·매도 {nss} / {len(ok)}종목 {last} 기준"
+          f" · 에지 중 거래량 급증 매수 {ns}·매도 {nss} · 제외(공개매수·거래정지·가격 고정) {len(excl)} / {len(ok)}종목 {last} 기준"
           f" · {time.time() - t0:.0f}초" + (f" · 일봉 못 받음 {miss}" if miss else ""))
 
 

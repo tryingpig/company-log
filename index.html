@@ -200,6 +200,7 @@
         <button type="button" class="chip" data-f="nolog" aria-pressed="false">리포트 로그에 없는 종목만</button>
       </div>
       <p class="mut" id="edgeCount"></p>
+      <details class="edge-excl" id="edgeExcl" hidden><summary class="mut" id="edgeExclH"></summary><ul class="mut" id="edgeExclL"></ul></details>
       <ul class="edge-grid" id="edgeList"></ul>
       <div class="feed-btns" id="edgeBtns" hidden><button type="button" class="feed-more" id="edgeMore">더 보기</button></div>
     </section>
@@ -280,7 +281,7 @@ const F = {
   KOSPI: s => s.market === 'KOSPI', KOSDAQ: s => s.market === 'KOSDAQ', flip: s => !!s.flip2w,
   upw: s => s.up3 > s.down3, dnw: s => s.down3 > s.up3, week: s => s.last_date.slice(0, 10) > weekCut,
   sig: s => !!s.sig5, sell: s => !!s.sell5,
-  eup: s => s.edge?.s === 1, edn: s => s.edge?.s === -1,
+  eup: s => s.edge?.s === 1 && !EXCL[s.code], edn: s => s.edge?.s === -1 && !EXCL[s.code],   // 공개매수·거래정지·가격 고정은 빼고(11-19)
 };
 const KEY = {recent: s => s.last_date, gap: s => s.gap ?? -1e9, rel: s => s.rel3 ?? -1e9, cnt: s => s.up3 + s.down3, cap: s => CAP[s.code] ?? -1};
 
@@ -411,9 +412,12 @@ document.getElementById('more').onclick = () => { shown += PAGE; render(); };
 
 const SIG_DAYS_TXT = '5거래일';
 // 매수·매도 에지: 둘 다 아니면 표시하지 않는다
+let EXCL = {};
+const EXCL_TXT = x => x.why === 'tender' ? `공개매수 진행 중(${x.d.slice(5).replace('-', '.')} 신고${x.by ? ' · ' + x.by : ''})` : x.why === 'halt' ? '거래정지(최근 5거래일 중 거래량 0인 날)' : '가격 고정(최근 5거래일 가격 폭 1% 미만 — 합병·상장폐지 절차 등 확인 필요)';
 function edgeBadge(s) {
   const e = s.edge;
   if (!e) return '';
+  if (EXCL[s.code]) return `<span class="edgec mut" title="${esc(EXCL_TXT(EXCL[s.code]))} — 에지 판정에서 뺐어요">에지 제외</span>`;
   const t = `${e.since.slice(5).replace('-', '.')}부터`;
   const rl = e.s === 1 && EDGE_RL[s.code];          // 재점등은 매수 에지 메뉴(edges.json) 계산 결과를 그대로
   return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 10·20·60일선 상승(보합 포함) · 5일선은 10일선 위면 꺾여도 유지">▲ 매수 에지 D+${e.run}</span>` +
@@ -1256,6 +1260,11 @@ function renderEdge() {
       ${surgeSvg(x)}${cl}</li>`;
   }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
   document.getElementById('edgeBtns').hidden = rows.length <= edgeShow;
+  // 공개매수·거래정지·가격 고정으로 뺀 종목 (사용자 결정 11-19) — 에지는 켜져 있지만 가격이 묶여 추세가 아님
+  const ex = edgeExcl.filter(x => x.s === edgeSide);
+  document.getElementById('edgeExcl').hidden = !ex.length;
+  document.getElementById('edgeExclH').textContent = `공개매수·거래정지·가격 고정 ${ex.length}종목은 목록에서 뺐어요 (눌러서 보기)`;
+  document.getElementById('edgeExclL').innerHTML = ex.map(x => `<li><a href="stock.html?code=${x.code}">${esc(x.name)}</a> · ${esc(EXCL_TXT(x))}${x.rc ? ` <a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${x.rc}" target="_blank" rel="noopener">공시 ↗</a>` : ''}</li>`).join('');
 }
 function edgeSeg(id, set) {
   document.getElementById(id).addEventListener('click', e => {
@@ -1275,7 +1284,8 @@ document.getElementById('edgeChips').addEventListener('click', e => {
 });
 document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; renderEdge(); };
 // 매수·매도 에지 탭 (사용자 결정 11-19) — 매도 에지는 edges_sell.json, 탭을 처음 열 때 받는다
-let edgeSide = 1, edgesSell = null;
+let edgeSide = 1, edgesSell = null, edgeExcl = [];
+
 const edgeList = () => edgeSide === 1 ? edges : (edgesSell || []);
 const SLAB = (side, up) => `${side === 1 ? '상승' : '하락'} 중 ${up ? '매수' : '매도'} 급증`;
 function surgeSvg(x) {
@@ -1304,7 +1314,8 @@ fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).
   if (!d) return;
   edges = d.items || []; edges.forEach(x => { x.rl = relit(x); if (x.rl) EDGE_RL[x.code] = x.rl; });
   document.getElementById('nBuy').textContent = edges.filter(edgeBig).length;
-  if (stocks.length && Object.keys(EDGE_RL).length) render();
+  edgeExcl = d.excluded || []; edgeExcl.forEach(x => { EXCL[x.code] = x; });
+  if (stocks.length && (Object.keys(EDGE_RL).length || (d.excluded || []).length)) render();
   edgeFrom = prevMonday(d.d);
   const today = edges.filter(x => x.run === 1 && edgeBig(x)).length;
   document.getElementById('edgeSub').textContent = `${d.d.slice(5).replace('-', '.')} 종가 기준 · 전 상장사 ${d.universe.toLocaleString()}종목 · ${d.updated.slice(5).replace('-', '.')} 계산`;
