@@ -63,6 +63,7 @@
         <span class="sep" aria-hidden="true"></span>
         <span><span class="mk sigk">●</span>강도·거래량 신호 (양봉만 · ★ 첫 신호)</span>
         <span><span class="mk sellk">■</span>매도 우위 대량 거래 (음봉 + 거래량 2배↑)</span>
+        <span><span class="mk pos">●</span><span class="mk neg">●</span>에지 중 거래량 급증 (에지 기간 최대·평균 2배↑ · 빨강 양봉 · 파랑 음봉)</span>
         <span class="sep" aria-hidden="true"></span>
         <span><span class="eb up"></span>매수 에지 <span class="eb dn"></span>매도 에지 (차트 아래 띠)</span>
         <span class="sep rs-only" aria-hidden="true" hidden></span>
@@ -328,6 +329,10 @@ function drawChart() {
   (data.sells || []).filter(s => s.d >= from).forEach(s => markers.push({
     time: s.d, position: 'aboveBar', shape: 'square', color: css('--sell'), text: s.volx.toFixed(1) + '배',
   }));
+  // 에지 중 거래량 급증(에지 3일↑ 뒤 그 기간 최대·평균 2배↑, 사용자 결정 11-19): 양봉 빨강은 캔들 아래, 음봉 파랑은 위
+  (data.surges || []).filter(s => s.d >= from).forEach(s => markers.push({
+    time: s.d, position: s.up ? 'belowBar' : 'aboveBar', shape: 'circle', color: css(s.up ? '--up' : '--down'), text: `급증 ${s.x}배`,
+  }));
   markers.sort((a, b) => a.time < b.time ? -1 : 1);
   candle.setMarkers(markers);
   chart.timeScale().fitContent();
@@ -405,6 +410,9 @@ function drawEdge(vis) {
     if (up) box.innerHTML = `<span class="edgec mut">정배열 유지</span><span class="es-t">5·10일선 &gt; 20일선 &gt; 60일선 순서는 그대로인데 기울기가 꺾여 매수 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
     if (dn) box.innerHTML = `<span class="edgec mut">역배열 유지</span><span class="es-t">5·10일선 &lt; 20일선 &lt; 60일선 순서는 그대로인데 기울기가 돌아서 매도 에지는 꺼짐${why ? ` (${esc(why)})` : ''}</span>`;
   }
+  // 지금 에지 안에서 난 거래량 급증 — 상태 줄에 가장 최근 것 (사용자 결정 11-19)
+  const sv = cur ? (data.surges || []).filter(x => x.side === cur && x.d >= st[st.length - run].d).pop() : null;
+  if (sv) box.innerHTML += `<span class="edgec ${sv.up ? 'up' : 'dn'}">${cur === 1 ? '상승' : '하락'} 중 ${sv.up ? '매수' : '매도'} 급증</span><span class="es-t">${sv.d.slice(5).replace('-', '.')} 에지 D+${sv.run}에 거래량이 이번 에지 기간 평균의 <b>${sv.x}배</b> (그날 ${sv.chg > 0 ? '+' : ''}${sv.chg}%, ${sv.up ? '양봉' : '음봉'})</span>`;
   const rl = cur === 1 && e.length === data.prices.length ? relitAt(e, data.prices.map(b => b.c)) : null;
   if (rl) box.innerHTML += `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 3거래일↑ 켜짐 → 1~5거래일 쉼(매도 에지 없음·종가 60일선 위) → 다시 켜짐">↻ 재점등</span><span class="es-t">앞서 <b>${rl.prev}일</b> 켜짐 → <b>${rl.gap}일</b> 쉼 (${esc(rl.why)} · 앞 고점 대비 <b>${rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>`;
   if (!e) return;

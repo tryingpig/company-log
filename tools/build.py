@@ -343,6 +343,27 @@ def edge_states(bars):
     return out
 
 
+SURGE_RUN = 4       # 에지 4거래일째부터 (앞 3일 이상이 비교 기간)
+
+
+def surge_events(bars, states):
+    """에지 중 거래량 급증(사용자 결정 11-19): 매수·매도 에지가 3거래일 이상 이어진 뒤, 그날 거래량이
+    ① 이번 에지 기간(그날 전까지) 최대를 넘고 ② 그 기간 평균의 2배 이상. 기준이 고정 숫자가 아니라 그 종목 자신의 에지 기간.
+    side 1=매수 에지 중 · -1=매도 에지 중, up = 양봉(종가 ≥ 시가) — 화면 색은 캔들 방향(빨강 매수 우위·파랑 매도 우위)."""
+    out, run = [], 0
+    for i, s in enumerate(states):
+        run = run + 1 if s and i and states[i - 1] == s else (1 if s else 0)
+        if not s or run < SURGE_RUN:
+            continue
+        prev = [b["v"] for b in bars[i - run + 1:i]]
+        avg = sum(prev) / len(prev)
+        v = bars[i]["v"]
+        if avg and v > max(prev) and v >= 2 * avg:
+            out.append({"d": bars[i]["d"], "side": s, "run": run, "x": round(v / avg, 1), "up": bars[i]["c"] >= bars[i]["o"],
+                        "chg": round((bars[i]["c"] / bars[i - 1]["c"] - 1) * 100, 1)})
+    return out
+
+
 def edge_now(states, bars):
     cur = states[-1] if states else 0
     run = 0
@@ -566,6 +587,7 @@ def main():
                                     "corp": (corps.get(code) or {}).get("corp_code") or old.get("corp"),
                                     "signals": sigs, "sells": sells,
                                     "edges": "".join({1: "+", -1: "-", 0: "."}[x] for x in edges),
+                                    "surges": surge_events(bars, edges),
                                     "close": close, "close_date": bars[-1]["d"] if bars else None,
                                     "consensus": consensus, "brokers": brokers,
                                     "prices": bars, "reports": reps},

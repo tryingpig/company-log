@@ -166,13 +166,46 @@
   <div role="tabpanel" id="pane-edge" aria-labelledby="tab-edge" hidden>
     <section class="feed" aria-labelledby="edgeHead">
       <h2 class="feed-h" id="edgeHead">매수 에지 <span class="sub" id="edgeSub"></span></h2>
+      <!-- 탭: 매수 에지(기본) · 에지 중 거래량 급증 (사용자 결정 11-19) -->
+      <div class="seg" role="group" aria-label="보기" id="edgeTab">
+        <button type="button" data-v="edge" class="on" aria-pressed="true">매수 에지</button>
+        <button type="button" data-v="surge" aria-pressed="false">에지 중 거래량 급증 <span id="nSurge"></span></button>
+      </div>
+      <div id="surgeMain" hidden>
+      <details class="sig-rule">
+        <summary class="rl-h">에지 중 거래량 급증 — 매수·매도 에지가 이어지던 중 거래량이 처음 크게 튄 날</summary>
+        <ol class="rl">
+          <li><b>매수 에지 또는 매도 에지가 3거래일 이상 이어진 뒤</b> (켜지면서 튄 날은 「강도·거래량 신호」 쪽이라 뺐어요)</li>
+          <li>그날 거래량이 <b>이번 에지 기간(그날 전까지) 중 최대를 넘고</b>, <b>그 기간 평균의 2배 이상</b> — 고정 숫자가 아니라 그 종목 자신의 에지 기간이 기준이에요</li>
+        </ol>
+        <p class="rl-n">색은 그날 캔들 방향이에요 — 빨강 = 양봉(종가 ≥ 시가, 매수 우위 거래), 파랑 = 음봉(매도 우위 거래) · 「상승 중 매수 급증」 매수 에지 + 양봉, 「상승 중 매도 급증」 매수 에지 + 음봉, 「하락 중 매도 급증」 매도 에지 + 음봉, 「하락 중 매수 급증」 매도 에지 + 양봉 · 최근 10거래일, 전 상장사(보통주), 장 마감 뒤 정기 실행에서 계산 · 「지금」은 오늘 에지 상태, 「그 뒤」는 급증한 날 종가 대비 오늘 종가 · 차트의 세로 점선이 급증한 날이에요 · 투자 판단이 아니라 이런 날이 있었다는 기록이에요</p>
+      </details>
+      <div class="seg" role="group" aria-label="정렬" id="surgeSort">
+        <button type="button" data-v="new" class="on" aria-pressed="true" title="날짜별로 묶고, 같은 날 안에서는 시총 큰 순">최신 순</button>
+        <button type="button" data-v="x" aria-pressed="false">급증 배수 순</button>
+        <button type="button" data-v="cap" aria-pressed="false">시총 순</button>
+      </div>
+      <div class="chips" id="surgeChips">
+        <button type="button" class="chip" data-f="bu" aria-pressed="false">상승 중 매수 급증</button>
+        <button type="button" class="chip" data-f="bd" aria-pressed="false">상승 중 매도 급증</button>
+        <button type="button" class="chip" data-f="sd" aria-pressed="false">하락 중 매도 급증</button>
+        <button type="button" class="chip" data-f="su" aria-pressed="false">하락 중 매수 급증</button>
+        <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
+        <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
+        <button type="button" class="chip" data-f="small" aria-pressed="false">시총 5,000억 이하</button>
+      </div>
+      <p class="mut" id="surgeCount"></p>
+      <ul class="edge-grid" id="surgeList"></ul>
+      <div class="feed-btns" id="surgeBtns" hidden><button type="button" class="feed-more" id="surgeMore">더 보기</button></div>
+      </div>
+      <div id="edgeMain">
       <details class="sig-rule">
         <summary class="rl-h">▲ 매수 에지 — 전 상장사(보통주)에서 아래를 <b>모두</b> 만족하는 종목</summary>
         <ol class="rl">
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
           <li><b>10·20·60일선은 전일보다 상승(보합 포함), 5일선은 10일선 위면 꺾여도 유지</b></li>
         </ol>
-        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 옅은 파랑 배경과 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 2~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 하루만 꺼졌다 켜진 건 깜빡임이라 빼고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
+        <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 옅은 파랑 배경과 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 1~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 쉰 이유(어느 선이 꺾였는지)를 같이 적고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
       <div class="seg" role="group" aria-label="범위" id="edgeRange">
         <button type="button" data-v="new" class="on" aria-pressed="true">지난주부터 켜짐 <span id="nEdgeNew"></span></button>
@@ -189,12 +222,13 @@
         <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
         <button type="button" class="chip" data-f="cap1t" aria-pressed="false">시총 1조↑</button>
         <button type="button" class="chip" data-f="small" aria-pressed="false">시총 5,000억 이하</button>
-        <button type="button" class="chip" data-f="relit" aria-pressed="false" title="앞서 3거래일 이상 켜졌다가 2~5거래일 쉬는 동안 매도 에지 없이 종가가 60일선 위를 지키고 다시 켜진 종목">↻ 재점등만</button>
+        <button type="button" class="chip" data-f="relit" aria-pressed="false" title="앞서 3거래일 이상 켜졌다가 1~5거래일 쉬는 동안 매도 에지 없이 종가가 60일선 위를 지키고 다시 켜진 종목">↻ 재점등만</button>
         <button type="button" class="chip" data-f="nolog" aria-pressed="false">리포트 로그에 없는 종목만</button>
       </div>
       <p class="mut" id="edgeCount"></p>
       <ul class="edge-grid" id="edgeList"></ul>
       <div class="feed-btns" id="edgeBtns" hidden><button type="button" class="feed-more" id="edgeMore">더 보기</button></div>
+      </div>
     </section>
   </div>
 
@@ -1263,9 +1297,61 @@ document.getElementById('edgeChips').addEventListener('click', e => {
   edgeShow = EDGE_PAGE; renderEdge();
 });
 document.getElementById('edgeMore').onclick = () => { edgeShow += EDGE_PAGE; renderEdge(); };
+// 에지 중 거래량 급증 탭 (사용자 결정 11-19) — data/edges.json surges, 카드 모양은 매수 에지와 같고 급증한 날을 세로 점선으로
+let surges = [], surgeDays = [], surgeSort = 'new', surgeF = new Set(), surgeShow = EDGE_PAGE;
+const SK = x => x.side === 1 ? (x.up ? 'bu' : 'bd') : (x.up ? 'su' : 'sd');
+const SLAB = {bu: '상승 중 매수 급증', bd: '상승 중 매도 급증', sd: '하락 중 매도 급증', su: '하락 중 매수 급증'};
+const SS = {new: (a, b) => b.d.localeCompare(a.d) || (b.cap || 0) - (a.cap || 0), x: (a, b) => b.x - a.x, cap: (a, b) => (b.cap || 0) - (a.cap || 0)};
+function surgeSvg(x) {
+  const bw = 300 / x.e.length, X = (x.si * bw + bw / 2).toFixed(1);
+  return edgeSvg(x).replace('</svg>', `<line x1="${X}" x2="${X}" y1="0" y2="84" stroke="var(${x.up ? '--up' : '--down'})" stroke-width="1.2" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/></svg>`);
+}
+function renderSurge() {
+  const kinds = ['bu', 'bd', 'sd', 'su'].filter(k => surgeF.has(k));
+  const pool = surges.filter(x => surgeF.has('small') ? !edgeBig(x) : edgeBig(x));
+  const rows = pool.filter(x => (!kinds.length || kinds.includes(SK(x))) && (!surgeF.has('KOSPI') || x.market === 'KOSPI')
+    && (!surgeF.has('KOSDAQ') || x.market === 'KOSDAQ')).sort(SS[surgeSort]);
+  const hid = surgeF.has('small') ? 0 : surges.filter(x => !edgeBig(x)).length;
+  document.getElementById('surgeCount').textContent = `${rows.length}건` + (hid ? ` · 시총 5,000억 이하 ${hid}건은 숨김` : '');
+  const vis = rows.slice(0, surgeShow), nDay = {};
+  rows.forEach(x => { nDay[x.d] = (nDay[x.d] || 0) + 1; });
+  document.getElementById('surgeList').innerHTML = vis.map((x, i) => {
+    const gh = surgeSort === 'new' && (i === 0 || vis[i - 1].d !== x.d) ? `<li class="edge-gh"><b>${edgeDay(x.d)}</b> <span class="mut">${nDay[x.d]}건 · 시총 큰 순</span></li>` : '';
+    const side = x.side === 1 ? '매수' : '매도', now = x.now === 1 ? '매수 에지' : x.now === -1 ? '매도 에지' : '에지 꺼짐';
+    return `${gh}<li><a class="edge-card" href="stock.html?code=${x.code}">
+      <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp">리포트</small>' : ''}</span>
+        <span class="edgec ${x.up ? 'up' : 'dn'}" title="${side} 에지 ${x.run}일째에 거래량이 그 에지 기간 평균의 ${x.x}배">${SLAB[SK(x)]}</span></span>
+      <span class="edge-rl">${edgeDay(x.d)} · ${side} 에지 D+${x.run} · 거래량 에지 기간 평균의 <b>${x.x}배</b> · 그날 ${pc(x.chg)}</span>
+      <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>그 뒤</small>${x.d === surgeDays[surgeDays.length - 1] ? '-' : pc(x.after)}</span><span><small>지금</small>${now}</span></span>
+      ${surgeSvg(x)}</a></li>`;
+  }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';
+  document.getElementById('surgeBtns').hidden = rows.length <= surgeShow;
+}
+function segOn(id, b) { document.querySelectorAll(`#${id} button`).forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); }
+document.getElementById('edgeTab').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  segOn('edgeTab', b);
+  document.getElementById('edgeMain').hidden = b.dataset.v !== 'edge';
+  document.getElementById('surgeMain').hidden = b.dataset.v !== 'surge';
+  if (b.dataset.v === 'surge') renderSurge();
+});
+document.getElementById('surgeSort').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  segOn('surgeSort', b); surgeSort = b.dataset.v; surgeShow = EDGE_PAGE; renderSurge();
+});
+document.getElementById('surgeChips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  const f = b.dataset.f, pair = {KOSPI: 'KOSDAQ', KOSDAQ: 'KOSPI'}[f];
+  if (surgeF.has(f)) surgeF.delete(f); else { surgeF.add(f); if (pair) surgeF.delete(pair); }
+  document.querySelectorAll('#surgeChips .chip').forEach(c => c.setAttribute('aria-pressed', surgeF.has(c.dataset.f)));
+  surgeShow = EDGE_PAGE; renderSurge();
+});
+document.getElementById('surgeMore').onclick = () => { surgeShow += EDGE_PAGE; renderSurge(); };
 fetch('data/edges.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(d => {
   if (!d) return;
   edges = d.items || []; edges.forEach(x => { x.rl = relit(x); if (x.rl) EDGE_RL[x.code] = x.rl; });
+  surges = d.surges || []; surgeDays = d.surge_days || [];
+  document.getElementById('nSurge').textContent = surges.filter(edgeBig).length || '';
   if (stocks.length && Object.keys(EDGE_RL).length) render();
   edgeFrom = prevMonday(d.d);
   const today = edges.filter(x => x.run === 1 && edgeBig(x)).length;
