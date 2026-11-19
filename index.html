@@ -170,7 +170,7 @@
         <summary class="rl-h">▲ 매수 에지 — 전 상장사(보통주)에서 아래를 <b>모두</b> 만족하는 종목</summary>
         <ol class="rl">
           <li><b>5일선·10일선이 둘 다 20일선 위</b>, <b>20일선이 60일선 위</b></li>
-          <li><b>네 선(5·10·20·60일) 모두 전일보다 상승</b></li>
+          <li><b>10·20·60일선은 전일보다 상승, 5일선은 상승이거나 10일선 위</b> (5일선이 잠깐 꺾여도 10일선 위면 유지)</li>
         </ol>
         <p class="rl-n">종목 페이지의 에지와 같은 기준이에요. 매도 에지는 너무 많아 여기선 빼고, 리포트 로그 종목은 「종목 목록」의 에지 칩으로도 볼 수 있어요 · 일봉·시총은 네이버 증권, 장 마감 뒤 정기 실행(15:40·20:05)에서 다시 계산해요 · 차트는 최근 3개월 종가(검정)와 5·10·20·60일선, 옅은 빨강 배경과 아래 띠의 빨강은 매수 에지였던 날, 옅은 파랑 배경과 띠의 파랑은 매도 에지였던 날 · 시총 5,000억 이하는 기본으로 숨기고 「시총 5,000억 이하」 칩을 누르면 그 종목들만 보여요 · 「↻ 재점등」은 우상향 중 잠깐 쉬었다 다시 켜진 종목이에요 — 앞서 3거래일 이상 켜져 있다가 2~5거래일(1주 안) 꺼졌고, 그동안 매도 에지가 한 번도 없고 종가가 60일선 위를 지켰다가 다시 켜진 경우. 하루만 꺼졌다 켜진 건 깜빡임이라 빼고, 5거래일보다 오래 쉬었으면 새로 켜진 걸로 봐요. 점선 박스가 쉬었던 구간이에요 · 카드를 누르면 종목 페이지로 가요. 「리포트」가 붙은 종목은 리포트까지, 나머지는 차트·에지·상대강도만 나와요</p>
       </details>
@@ -212,8 +212,8 @@
     </div>
     <div class="chips" id="chips">
       <span class="lab">필터</span>
-      <button type="button" class="chip" data-f="eup" aria-pressed="false" title="5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 상승">▲ 매수 에지</button>
-      <button type="button" class="chip" data-f="edn" aria-pressed="false" title="5·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 네 선 모두 하락">▼ 매도 에지</button>
+      <button type="button" class="chip" data-f="eup" aria-pressed="false" title="5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위">▲ 매수 에지</button>
+      <button type="button" class="chip" data-f="edn" aria-pressed="false" title="5·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래">▼ 매도 에지</button>
       <button type="button" class="chip" data-f="KOSPI" aria-pressed="false">코스피</button>
       <button type="button" class="chip" data-f="KOSDAQ" aria-pressed="false">코스닥</button>
       <button type="button" class="chip" data-f="flip" aria-pressed="false">⚠&#xFE0E; 최근 2주 전환</button>
@@ -409,9 +409,9 @@ function edgeBadge(s) {
   if (!e) return '';
   const t = `${e.since.slice(5).replace('-', '.')}부터`;
   const rl = e.s === 1 && EDGE_RL[s.code];          // 재점등은 매수 에지 메뉴(edges.json) 계산 결과를 그대로
-  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 네 선 모두 상승">▲ 매수 에지 ${e.run}일째</span>` +
-                     (rl ? `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 ${rl.prev}일 켜짐 → ${rl.gap}일 쉼(앞 고점 대비 ${rl.dip.toFixed(1)}%, 60일선 위 유지) → 다시 켜짐">↻ 재점등</span>` : '')
-                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 네 선 모두 하락">▼ 매도 에지 ${e.run}일째</span>`;
+  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위">▲ 매수 에지 ${e.run}일째</span>` +
+                     (rl ? `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 ${rl.prev}일 켜짐 → ${rl.gap}일 쉼(${rl.why} · 앞 고점 대비 ${rl.dip.toFixed(1)}%, 60일선 위 유지) → 다시 켜짐">↻ 재점등</span>` : '')
+                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래">▼ 매도 에지 ${e.run}일째</span>`;
 }
 
 // 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 / 실적 캘린더 (주소 끝 #flips · #signals · #earn 으로 바로 열기)
@@ -438,7 +438,7 @@ addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
 // 폰 메뉴: 탭 버튼을 그대로 옮겨 '현재 메뉴 ▾' 와 펼침 목록을 만든다 (숫자 배지는 탭 버튼 것을 복사)
 const MENU_DESC = {list: '리포트 로그 종목 · 목표가·의견', flips: '같은 증권사 상향↔하향', signals: '강도·거래량 / 매도 우위 대량 거래',
-  edge: '전 상장사 · 이평선 정배열 + 모두 상승', earn: '발표 일정 · 추정치 · 잠정 실적', scr: '전 상장사 실적 1~3차 거르기'};
+  edge: '전 상장사 · 이평선 정배열 + 상승', earn: '발표 일정 · 추정치 · 잠정 실적', scr: '전 상장사 실적 1~3차 거르기'};
 // 메뉴 아이콘 — 막연한 은유 말고 그 화면의 실물 모양: 리포트 문서 · 상향↔하향 화살표 · 거래량 막대 · 올라가는 이평선 · 달력 · 거르는 깔때기
 const MENU_ICON = {
   list: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>',
@@ -1166,13 +1166,27 @@ const ES = {new: (a, b) => a.run - b.run || (b.cap || 0) - (a.cap || 0), cap: (a
   chg: (a, b) => b.chg - a.chg, tv: (a, b) => b.tv - a.tv};
 // 재점등(사용자 요청 11-16) — 우상향 중 잠깐 쉬었다 다시 켜진 매수 에지. 아래를 모두 만족:
 //   1) 직전 매수 에지가 3거래일 이상 이어졌다 (RL_PREV)
-//   2) 그 뒤 2~5거래일 꺼져 있었다 (RL_GAP — 1거래일은 이평선 하나가 잠깐 평평해진 깜빡임이라 제외,
-//      5거래일(1주)보다 길면 앞 상승과 이어진 흐름으로 보지 않고 새로 켜진 것으로 본다. 11-13 기준 쉼은 대부분 1주 안)
+//   2) 그 뒤 1~5거래일 꺼져 있었다 (RL_GAP — 11-19 사용자: 하루 쉼도 재점등. 5일선만 꺾인 날은 에지 기준이 바뀌어 애초에 안 꺼짐,
+//      5거래일(1주)보다 길면 앞 상승과 이어진 흐름으로 보지 않고 새로 켜진 것으로 본다)
 //   3) 쉬는 동안 매도 에지('-')가 한 번도 없었다
 //   4) 쉬는 동안 종가가 매일 60일선 위였다
 //   5) 지금 다시 켜져 있다 (x.run = 이번에 켜진 뒤 거래일 수)
 // 날짜 칸은 x.e(최근 62거래일 에지 '+'/'-'/'.'), 종가·60일선은 x.c(122거래일) 로 계산. dip = 앞 켜짐 구간 종가 고점 대비 쉼 동안 종가 저점
-const RL_PREV = 3, RL_GAP = [2, 5];
+const RL_PREV = 3, RL_GAP = [1, 5];
+// 쉰 날마다 매수 에지 조건 중 무엇이 깨졌는지 (사용자 요청 11-19) — c = 종가, i0 = 쉼 첫날(c 기준), n = 쉰 날 수
+function gapWhy(c, i0, n) {
+  const ma = (i, k) => c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k, cnt = {};
+  for (let i = i0; i < i0 + n; i++) {
+    const m = k => ma(i, k), p = k => ma(i - 1, k), r = new Set();
+    if (!(Math.min(m(5), m(10)) > m(20))) r.add('5·10일선이 20일선 아래');
+    if (!(m(20) > m(60))) r.add('20일선이 60일선 아래');
+    if (!(m(5) > p(5) || m(5) > m(10))) r.add('5일선 꺾여 10일선 아래');
+    [10, 20, 60].forEach(k => { if (!(m(k) > p(k))) r.add(`${k}일선 ${m(k) < p(k) ? '하락' : '보합'}`); });
+    r.forEach(t => { cnt[t] = (cnt[t] || 0) + 1; });
+  }
+  return Object.entries(cnt).map(([t, k]) => n > 1 ? `${t} ${k}일` : t).join(' · ');
+}
+
 let EDGE_RL = {};                                   // {code: 재점등 정보} — 종목 목록 칩용
 function relit(x) {
   const e = x.e, c = x.c, pre = e.slice(0, e.length - x.run), m = pre.match(/(\++)([^+]*)$/);
@@ -1183,7 +1197,7 @@ function relit(x) {
   const ma60 = i => c.slice(i - 59, i + 1).reduce((s, v) => s + v, 0) / 60;
   for (let i = g0; i < g0 + gap; i++) if (i < 59 || c[i] <= ma60(i)) return null;
   const hi = Math.max(...c.slice(g0 - prev, g0)), lo = Math.min(...c.slice(g0, g0 + gap));
-  return {prev, gap, dip: (lo / hi - 1) * 100, g0: pre.length - gap};
+  return {prev, gap, dip: (lo / hi - 1) * 100, g0: pre.length - gap, why: gapWhy(c, g0, gap)};
 }
 function edgeSvg(x) {
   const W = 300, H = 84, B = 6, n = x.e.length, c = x.c, off = c.length - n;
@@ -1226,7 +1240,7 @@ function renderEdge() {
     return `${gh}<li>${o}
       <span class="eh"><span class="fn">${esc(x.name)}<small class="mk">${MK[x.market] || ''}</small>${x.inlog ? '<small class="mk rp" title="리포트 로그 종목 — 종목 페이지에 리포트까지 나와요">리포트</small>' : ''}</span>
         <span class="edgec up" title="${x.run}거래일째 켜져 있음">${edgeDay(x.since)} D+${x.run}</span></span>
-      ${x.rl ? `<span class="edge-rl"><span class="edgec relit">↻ 재점등</span> 앞서 <b>${x.rl.prev}일</b> 켜짐 → <b>${x.rl.gap}일</b> 쉼 (앞 고점 대비 <b>${x.rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>` : ''}
+      ${x.rl ? `<span class="edge-rl"><span class="edgec relit">↻ 재점등</span> 앞서 <b>${x.rl.prev}일</b> 켜짐 → <b>${x.rl.gap}일</b> 쉼 (${esc(x.rl.why)} · 앞 고점 대비 <b>${x.rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>` : ''}
       <span class="em"><span><small>시총</small>${x.cap ? eok(x.cap) : '-'}</span><span><small>켜진 뒤</small>${pc(x.chg)}</span><span><small title="최근 20거래일 하루 평균">거래대금 20일 평균</small>${eok(x.tv)}</span></span>
       ${edgeSvg(x)}${cl}</li>`;
   }).join('') || '<li class="mut">조건에 맞는 종목이 없어요</li>';

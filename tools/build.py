@@ -320,8 +320,10 @@ def sell_signals(bars):
 
 def edge_states(bars):
     """매수·매도 에지(사용자 정의, 2026-10-21) — 날짜마다 1 / -1 / 0. 모두 AND.
-      매수: 5일선·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승
-      매도: 5일선·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 네 선 모두 전일보다 하락"""
+      매수: 5일선·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선 전일보다 상승,
+            5일선은 상승이거나 10일선 위 (11-19 사용자 — 5일선이 꺾여도 10일선 위면 살아 있음)
+      매도: 5일선·10일선이 둘 다 20일선 아래, 20일선이 60일선 아래, 10·20·60일선 전일보다 하락,
+            5일선은 하락이거나 10일선 아래 (대칭). 60일선은 하루 살짝 꺾여도 기준대로 끈다(사용자 11-19)"""
     c = [b["c"] for b in bars]
     out = []
     for i in range(len(c)):
@@ -330,9 +332,9 @@ def edge_states(bars):
             continue
         m = {n: sum(c[i - n + 1:i + 1]) / n for n in (5, 10, 20, 60)}
         p = {n: sum(c[i - n:i]) / n for n in (5, 10, 20, 60)}
-        if min(m[5], m[10]) > m[20] > m[60] and all(m[n] > p[n] for n in m):
+        if min(m[5], m[10]) > m[20] > m[60] and (m[5] > p[5] or m[5] > m[10]) and all(m[n] > p[n] for n in (10, 20, 60)):
             out.append(1)
-        elif max(m[5], m[10]) < m[20] < m[60] and all(m[n] < p[n] for n in m):
+        elif max(m[5], m[10]) < m[20] < m[60] and (m[5] < p[5] or m[5] < m[10]) and all(m[n] < p[n] for n in (10, 20, 60)):
             out.append(-1)
         else:
             out.append(0)

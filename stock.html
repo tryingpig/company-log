@@ -83,7 +83,7 @@
           <li>상대강도 = 종목 주가 ÷ 시장 지수(코스피 종목은 코스피, 코스닥 종목은 코스닥)를 차트 첫날 = 100으로 맞춘 값이에요. 선이 오르면 그동안 시장보다 강한 거예요.</li>
           <li>● 강도·거래량 신호 = 그날 상대강도가 직전 20거래일 최고치를 넘고, 거래량이 평소의 2배 이상이고, 종가가 20일선 위이고, 양봉이면서 전일보다 오른 날이에요(음봉 대량 거래는 제외). ★은 직전 20거래일 동안 신호가 없던 첫 신호예요.</li>
           <li>■ 매도 우위 대량 거래 = 음봉(종가가 시가보다 낮음)인데 거래량이 평소의 2배 이상인 날이에요. 많이 거래됐지만 파는 쪽이 이긴 날이에요.</li>
-          <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 네 선 모두 전일보다 상승(모두 만족). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요. 차트 배경도 매수 에지였던 날은 옅은 빨강, 매도 에지였던 날은 옅은 파랑이에요(범례 「에지 배경」으로 켜고 꺼요).</li>
+          <li>▲ 매수 에지 = 5·10일선이 둘 다 20일선 위, 20일선이 60일선 위, 10·20·60일선은 전일보다 상승하고 5일선은 상승이거나 10일선 위(모두 만족, 5일선이 잠깐 꺾여도 10일선 위면 유지). ▼ 매도 에지는 그 반대예요. 둘 다 아니면 표시하지 않고, 차트 아래 띠에는 회색으로 남겨요. 차트 배경도 매수 에지였던 날은 옅은 빨강, 매도 에지였던 날은 옅은 파랑이에요(범례 「에지 배경」으로 켜고 꺼요).</li>
           <li>수급 = 외국인·기관·개인의 그날 순매수(산 주식 수 − 판 주식 수)예요. 거래량을 누가 샀는지 나눈 값이 아니라서 셋을 더하면 거의 0이에요(나머지는 기타법인 등). 기본은 「일별」로 외국인·기관의 날마다 순매수를 0선 위(순매수)·아래(순매도)로 쌓은 막대(개인은 위 줄에 숫자로만), 「누적」은 차트 첫날부터 쌓은 순매수예요. 네이버 증권 기준이고, 그날 값은 장 마감 뒤 저녁 갱신에 확정돼요.</li>
           <li>마커를 누르면 해당 리포트로 이동해요. 볼린저·거래량은 위 범례 버튼으로 켜고 꺼요.</li>
         </ul>
@@ -350,9 +350,23 @@ function drawChart() {
 }
 
 // 재점등(index.html relit() 과 같은 기준, 사용자 요청 11-16) — 우상향 중 잠깐 쉬었다 다시 켜진 매수 에지:
-//   직전 매수 에지 3거래일↑ → 2~5거래일 꺼짐(매도 에지 없음 · 종가가 매일 60일선 위) → 지금 다시 켜짐
+//   직전 매수 에지 3거래일↑ → 1~5거래일 꺼짐(11-19 하루 쉼 포함)(매도 에지 없음 · 종가가 매일 60일선 위) → 지금 다시 켜짐
 // e = 에지 문자열('+'/'-'/'.'), c = 종가 — 둘 다 data.prices 와 같은 날짜 순서. g0 = 쉼 시작 칸
-const RL_PREV = 3, RL_GAP = [2, 5];
+const RL_PREV = 3, RL_GAP = [1, 5];
+// 쉰 날마다 매수 에지 조건 중 무엇이 깨졌는지 (사용자 요청 11-19) — c = 종가, i0 = 쉼 첫날(c 기준), n = 쉰 날 수
+function gapWhy(c, i0, n) {
+  const ma = (i, k) => c.slice(i - k + 1, i + 1).reduce((s, v) => s + v, 0) / k, cnt = {};
+  for (let i = i0; i < i0 + n; i++) {
+    const m = k => ma(i, k), p = k => ma(i - 1, k), r = new Set();
+    if (!(Math.min(m(5), m(10)) > m(20))) r.add('5·10일선이 20일선 아래');
+    if (!(m(20) > m(60))) r.add('20일선이 60일선 아래');
+    if (!(m(5) > p(5) || m(5) > m(10))) r.add('5일선 꺾여 10일선 아래');
+    [10, 20, 60].forEach(k => { if (!(m(k) > p(k))) r.add(`${k}일선 ${m(k) < p(k) ? '하락' : '보합'}`); });
+    r.forEach(t => { cnt[t] = (cnt[t] || 0) + 1; });
+  }
+  return Object.entries(cnt).map(([t, k]) => n > 1 ? `${t} ${k}일` : t).join(' · ');
+}
+
 function relitAt(e, c) {
   let run = 0;
   for (let i = e.length - 1; i >= 0 && e[i] === '+'; i--) run++;
@@ -364,7 +378,7 @@ function relitAt(e, c) {
   const g0 = pre.length - gap, ma60 = i => c.slice(i - 59, i + 1).reduce((s, v) => s + v, 0) / 60;
   for (let i = g0; i < g0 + gap; i++) if (i < 59 || c[i] <= ma60(i)) return null;
   const hi = Math.max(...c.slice(g0 - prev, g0)), lo = Math.min(...c.slice(g0, g0 + gap));
-  return {prev, gap, dip: (lo / hi - 1) * 100, g0};
+  return {prev, gap, dip: (lo / hi - 1) * 100, g0, why: gapWhy(c, g0, gap)};
 }
 
 // 매수·매도 에지: 지금 상태(둘 다 아니면 숨김) + 차트 아래 날짜별 띠 + 큰 차트 배경(매수 에지였던 날 옅은 빨강·매도 에지였던 날 옅은 파랑, 재점등 쉼 구간 점선 — 범례 「에지 배경」으로 켜고 끔)
@@ -379,11 +393,11 @@ function drawEdge(vis) {
     const since = st[st.length - run].d.slice(5).replace('-', '.');
     box.hidden = false;
     box.innerHTML = cur === 1
-      ? `<span class="edgec up">▲ 매수 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &gt; 20일선 &gt; 60일선, 네 선 모두 상승 중</span>`
-      : `<span class="edgec dn">▼ 매도 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &lt; 20일선 &lt; 60일선, 네 선 모두 하락 중</span>`;
+      ? `<span class="edgec up">▲ 매수 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &gt; 20일선 &gt; 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위</span>`
+      : `<span class="edgec dn">▼ 매도 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &lt; 20일선 &lt; 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래</span>`;
   } else box.hidden = true;
   const rl = cur === 1 && e.length === data.prices.length ? relitAt(e, data.prices.map(b => b.c)) : null;
-  if (rl) box.innerHTML += `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 3거래일↑ 켜짐 → 2~5거래일 쉼(매도 에지 없음·종가 60일선 위) → 다시 켜짐">↻ 재점등</span><span class="es-t">앞서 <b>${rl.prev}일</b> 켜짐 → <b>${rl.gap}일</b> 쉼 (앞 고점 대비 <b>${rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>`;
+  if (rl) box.innerHTML += `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 3거래일↑ 켜짐 → 1~5거래일 쉼(매도 에지 없음·종가 60일선 위) → 다시 켜짐">↻ 재점등</span><span class="es-t">앞서 <b>${rl.prev}일</b> 켜짐 → <b>${rl.gap}일</b> 쉼 (${esc(rl.why)} · 앞 고점 대비 <b>${rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>`;
   if (!e) return;
   // 큰 차트 배경: 차트 뒤 캔버스(차트 배경이 투명이라 비친다)
   const el = document.getElementById('chart');
