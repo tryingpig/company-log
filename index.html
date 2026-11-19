@@ -409,9 +409,9 @@ function edgeBadge(s) {
   if (!e) return '';
   const t = `${e.since.slice(5).replace('-', '.')}부터`;
   const rl = e.s === 1 && EDGE_RL[s.code];          // 재점등은 매수 에지 메뉴(edges.json) 계산 결과를 그대로
-  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위">▲ 매수 에지 ${e.run}일째</span>` +
+  return e.s === 1 ? `<span class="edgec up" title="${t} · 5·10일선 > 20일선 > 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위">▲ 매수 에지 D+${e.run}</span>` +
                      (rl ? `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 ${rl.prev}일 켜짐 → ${rl.gap}일 쉼(${rl.why} · 앞 고점 대비 ${rl.dip.toFixed(1)}%, 60일선 위 유지) → 다시 켜짐">↻ 재점등</span>` : '')
-                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래">▼ 매도 에지 ${e.run}일째</span>`;
+                   : `<span class="edgec dn" title="${t} · 5·10일선 < 20일선 < 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래">▼ 매도 에지 D+${e.run}</span>`;
 }
 
 // 탭: 종목 목록 / 의견 전환 / 강도·거래량 신호 / 실적 캘린더 (주소 끝 #flips · #signals · #earn 으로 바로 열기)

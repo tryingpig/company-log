@@ -390,11 +390,12 @@ function drawEdge(vis) {
   let run = 0;
   for (let i = st.length - 1; i >= 0 && cur && st[i].s === cur; i--) run++;
   if (cur) {
-    const since = st[st.length - run].d.slice(5).replace('-', '.');
+    // 첫 화면 매수 에지 목록과 같은 'D+n'(켜진 날 = D+1) 표기 (사용자 요청 11-19)
+    const d0 = st[st.length - run].d, since = `${d0.slice(5).replace('-', '.')} (${'일월화수목금토'[new Date(d0 + 'T00:00:00').getDay()]})`;
     box.hidden = false;
     box.innerHTML = cur === 1
-      ? `<span class="edgec up">▲ 매수 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &gt; 20일선 &gt; 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위</span>`
-      : `<span class="edgec dn">▼ 매도 에지</span><span class="es-t">${since}부터 ${run}거래일째 · 5·10일선 &lt; 20일선 &lt; 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래</span>`;
+      ? `<span class="edgec up">▲ 매수 에지 D+${run}</span><span class="es-t">${since} 켜짐 · 5·10일선 &gt; 20일선 &gt; 60일선, 10·20·60일선 상승, 5일선은 상승 또는 10일선 위</span>`
+      : `<span class="edgec dn">▼ 매도 에지 D+${run}</span><span class="es-t">${since} 켜짐 · 5·10일선 &lt; 20일선 &lt; 60일선, 10·20·60일선 하락, 5일선은 하락 또는 10일선 아래</span>`;
   } else box.hidden = true;
   const rl = cur === 1 && e.length === data.prices.length ? relitAt(e, data.prices.map(b => b.c)) : null;
   if (rl) box.innerHTML += `<span class="edgec relit" title="우상향 중 쉬었다 다시 켜짐 — 앞서 3거래일↑ 켜짐 → 1~5거래일 쉼(매도 에지 없음·종가 60일선 위) → 다시 켜짐">↻ 재점등</span><span class="es-t">앞서 <b>${rl.prev}일</b> 켜짐 → <b>${rl.gap}일</b> 쉼 (${esc(rl.why)} · 앞 고점 대비 <b>${rl.dip.toFixed(1)}%</b>, 60일선 위 유지) → 다시 켜짐</span>`;
