@@ -197,7 +197,7 @@ DART_UNIT = {"억원": 1, "백만원": 0.01, "천원": 0.00001, "원": 1e-8}
 def dart_key():
     for ln in DART_ENV.read_text(encoding="utf-8").splitlines():
         if ln.startswith("DART_API_KEY="):
-            return ln.split("=", 1)[1].strip()
+            return (__import__("sys").path.insert(0, r"C:\ClaudeCode\_shared") or __import__("credstore").resolve)(ln.split("=", 1)[1].strip())
     raise RuntimeError("DART_API_KEY 없음")
 
 
@@ -311,12 +311,24 @@ def qend(y, q):
     return date(y, q * 3, 30 if q in (2, 3) else 31)
 
 
+# 공휴일(대체공휴일·선거일 포함) — 마감일이 쉬는 날이면 다음 영업일 (사용자 결정 11-19).
+# 예: 2027 반기 마감 8.14(토) → 8.16 은 광복절 대체공휴일 → 실제 마감 8.17. 2029년부터는 목록을 이어 적어야 한다.
+KR_HOLIDAYS = {date.fromisoformat(d) for d in (
+    "2026-01-01 2026-02-16 2026-02-17 2026-02-18 2026-03-02 2026-05-05 2026-05-25 2026-06-03 2026-08-17 "
+    "2026-09-24 2026-09-25 2026-10-05 2026-10-09 2026-12-25 "
+    "2027-01-01 2027-02-08 2027-02-09 2027-03-01 2027-05-05 2027-05-13 2027-08-16 2027-09-14 2027-09-15 2027-09-16 "
+    "2027-10-04 2027-10-11 2027-12-27 "
+    "2028-01-26 2028-01-27 2028-01-28 2028-03-01 2028-04-12 2028-05-02 2028-05-05 2028-06-06 2028-08-15 "
+    "2028-10-02 2028-10-03 2028-10-04 2028-10-05 2028-10-09 2028-12-25").split()}
+
+
 def due_date(y, q):
-    """정기보고서 법정 제출 마감일: 분기·반기 = 분기말 + 45일, 사업보고서 = 결산일 + 90일. 주말이면 다음 월요일.
-    (공휴일은 안 따진다 — 3.31·5.15·8.14·11.14 무렵은 공휴일과 겹치는 해가 드물다)"""
+    """정기보고서 법정 제출 마감일: 분기·반기 = 분기말 + 45일, 사업보고서 = 결산일 + 90일. 주말·공휴일이면 다음 영업일."""
     d = qend(y, q) + timedelta(days=90 if q == 4 else 45)
-    while d.weekday() >= 5:
+    while d.weekday() >= 5 or d in KR_HOLIDAYS:
         d += timedelta(days=1)
+    if d.year > max(KR_HOLIDAYS).year:
+        print(f"  ⚠ 공휴일 목록이 {max(KR_HOLIDAYS).year}년까지라 {d} 마감일은 주말만 반영 — KR_HOLIDAYS 이어 적기")
     return d
 
 
