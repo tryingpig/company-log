@@ -181,6 +181,16 @@ def run_flow():
     return None
 
 
+def _flow_has_today():
+    """장 마감 뒤(18시~) 저녁 실행인데 수급 원본에 오늘 줄이 없으면 False. 그 밖의 시각·주말은 True(재시도 안 함)."""
+    now = datetime.now(an.KST)
+    if now.weekday() >= 5 or now.strftime("%H:%M") < "18:00":
+        return True
+    today = now.strftime("%Y-%m-%d")
+    files = sorted((ROOT / "raw" / "flow").glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
+    return any(f'"{today}"' in p.read_text(encoding="utf-8") for p in files)
+
+
 def run_company():
     """기업 분석 자료(company.py): 스탁이지 실적·추정(바뀐 종목만) + DART 사업보고서 「사업의 내용」 원문. 실패해도 나머지는 계속."""
     log("기업 분석 자료 시작")
@@ -230,6 +240,12 @@ async def main_async():
         await bg
     an.rebuild_all()                       # 대상 밖으로 빠진 종목도 구간·가중치 다시 계산
     biz_fail = [] if LIGHT else await bizsum.run(60, log)     # 새 사업보고서만 AI 정리
+    if not LIGHT and not _flow_has_today():
+        # 네이버가 오늘 수급을 20시 넘어 내놓는 날이 있다(11-17~19 저녁 실행 전부 누락) → 끝나기 직전 한 번 더
+        log("수급: 오늘 줄이 아직 없어 한 번 더 받음")
+        flow_problem = run_flow() or flow_problem
+        if not _flow_has_today():
+            log("  flow | 여전히 오늘 줄 없음 → 다음 실행이 채움")
     note = f"새 리포트 {st['reports']}건·의견 {st['summaries']}종목"
     push(note)
     log(f"끝 {(time.time() - t0) / 60:.0f}분 · {st}")

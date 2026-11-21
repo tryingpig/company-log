@@ -25,7 +25,9 @@ def _load(p, default):
 
 def send(text):
     cfg = _load(CFG, {})
-    src = _load(Path(cfg["token_from"]) / "config.json", {})
+    # 빌려 온 config 의 "@cred:" 참조를 Windows 자격 증명 관리자 값으로 푼다(CLAUDE.md 비밀값 규칙)
+    src = (__import__("sys").path.insert(0, r"C:\ClaudeCode\_shared") or __import__("credstore").resolve)(
+        _load(Path(cfg["token_from"]) / "config.json", {}))
     token = (src.get("telegram") or {}).get("bot_token") or src.get("bot_token")
     body = json.dumps({"chat_id": cfg["chat_id"], "text": text, "disable_web_page_preview": True}).encode()
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", body,
